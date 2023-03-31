@@ -1,42 +1,25 @@
-import os
 import json
-from paths import CACHE_DIR
+from summarizer import summarize, summarize_openai
 
-class DataCache():
-    def __init__(self, fp=os.path.join(CACHE_DIR, "cache.json")):
-        self.fp = fp
-        if not os.path.exists(self.fp):
-            self.write({})
+class Memory():
+    def __init__(self) -> None:
+        self.memory = []
 
-    def write(self, data):
-        with open(self.fp, 'w+') as f:
-            return f.write(json.dumps(data, indent=4, sort_keys=True))
+    def add(self, text, summarizer=summarize):
+        self.memory.append(
+            {
+            "text": text,
+            "summary": summarize(text, max_total_tokens=150)
+            }
+        )
 
-    def read(self):
-        with open(self.fp, 'r') as f:
-            return json.loads(f.read())
+    def to_json(self):
+        return json.dumps(self.memory)
 
-    def get(self, key, default=None):
-        return self.read().get(key, default)
+    def from_json(self, data):
+        self.memory = json.loads(data)
 
-    def set(self, key, value):
-        data = self.read()
-        data[key] = value
-        self.write(data)
-
-    def remove(self, key):
-        data = self.read()
-        if key in data:
-            data.pop(key)
-        self.write(data)
-
-    def key_exists(self, key):
-        data = self.read()
-        return key in data
-
-    pop = remove
-
-
-
-
-data_cache = DataCache()
+    def memory_summary(self):
+        text = ""
+        for part in self.memory:
+            text += part['summary'] + "\n"

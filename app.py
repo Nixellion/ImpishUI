@@ -1,18 +1,6 @@
 # https://docs.streamlit.io/library/get-started/create-an-app
 
-"""
-TODO:
 
-- [x] Add World Info field that will be persistent throughout the story always prepended.
-- [x] Token length checks to dynamically expand and contract the prompt to fit the specified length
-- [x] openai_requester.py cleanup
-- [x] Improve responsiveness and formatting https://github.com/kinosal/tweet/blob/main/app.py
-- [x] Add "Edit" checkbox to edit text in place
-- [x] Cleanup code, check and upload
-- [ ] Create an alternate mode in which it summarizes stories in parts
-- [ ] Savegames
-- [ ] Remember settings
-"""
 import logging
 
 import streamlit as st
@@ -23,7 +11,7 @@ import traceback
 
 from configuration import config
 
-from memory import data_cache
+from datacache import data_cache
 
 from prompter import format_prompt
 
@@ -53,7 +41,8 @@ all_state_variables = [
     ["text_error", ""],
     ["user_prompt", ""],
     ["n_requests", ""],
-    ["edit_mode", False]
+    ["edit_mode", False],
+    ["memory", {}]
     # ["plain_text_log", data_cache.get("plain_text_log", "")]
 ]
 
