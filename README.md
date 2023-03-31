@@ -1,6 +1,8 @@
 # ImpishUI
 Storywriting UI with support for KoboldAI and ChatGPT with automatic summarization.
 
+Proof of concept.
+
 ## Prerequisites
 
 You need `Python 3` and `pip` installed on your system.
