@@ -1,0 +1,4 @@
+# Copy this config to a file named "config.yaml" and adjust settings as you see fit
+openai_token: xx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+openai_model: "text-davinci-003"
+kobold_url: http://127.0.0.1:5000
