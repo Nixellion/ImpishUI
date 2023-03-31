@@ -16,4 +16,5 @@ You need `Python 3` and `pip` installed on your system.
 
 ## Screenshots
 
+![Screenshot](https://media.discordapp.net/attachments/874894021821087745/1090666325870919680/image.png?width=1920&height=837)
 ![Screenshot](https://media.discordapp.net/attachments/874894021821087745/1090667034041405470/image.png?width=1786&height=905)
