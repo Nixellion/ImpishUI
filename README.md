@@ -20,3 +20,16 @@ You need `Python 3` and `pip` installed on your system.
 
 ![Screenshot](https://media.discordapp.net/attachments/874894021821087745/1090666325870919680/image.png?width=1920&height=837)
 ![Screenshot](https://media.discordapp.net/attachments/874894021821087745/1090667034041405470/image.png?width=1786&height=905)
+
+## TODO
+
+- [x] Add World Info field that will be persistent throughout the story always prepended.
+- [x] Token length checks to dynamically expand and contract the prompt to fit the specified length
+- [x] openai_requester.py cleanup
+- [x] Improve responsiveness and formatting https://github.com/kinosal/tweet/blob/main/app.py
+- [x] Add "Edit" checkbox to edit text in place
+- [x] Cleanup code, check and upload
+- [ ] Create an alternate mode in which it summarizes stories in parts
+- [ ] Savegames
+- [ ] Remember settings
+- [ ] Fruther prompt generator improvements
