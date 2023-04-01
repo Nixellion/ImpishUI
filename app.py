@@ -78,7 +78,7 @@ def on_submit():
         with st.spinner("Please wait..."):
             try:
                 data_cache.set("world_info", world_info)
-                TOKENS_LEFT = int(MAX_CONTEXT - (count_tokens(user_prompt) + count_tokens(world_info)))
+                TOKENS_LEFT = int(max_context - (count_tokens(user_prompt) + count_tokens(world_info)))
 
                 summarize_func = summarize if OPENAI_SUM is False else summarize_openai
                 if len(data_cache.get("plain_text_log", "")) > 0:
@@ -102,7 +102,7 @@ def on_submit():
                         "prompt": prompt,
                         "temperature": TEMPERATURE,
                         "top_p": TOP_P,
-                        "max_context_length": MAX_CONTEXT,
+                        "max_context_length": max_context,
                         "max_length": MAX_TOKENS,
                         "rep_pen": REPETITION_PENALTY,
                         "rep_pen_range": REPETITION_PENALTY,
@@ -183,7 +183,7 @@ with st.sidebar:
             model_name
         ))
 
-        MAX_CONTEXT = st.slider("Max Context Length", min_value=512, max_value=2048, value=2048)
+        max_context = st.slider("Max Context Length", min_value=512, max_value=2048, value=2048)
         MAX_TOKENS = st.slider("Max Response Tokens", min_value=1, max_value=512, value=512)
         TEMPERATURE = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.5)
         TOP_P = st.slider("Top P", min_value=0.0, max_value=1.0, value=0.9)
