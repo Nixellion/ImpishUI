@@ -2,3 +2,4 @@ nicegui
 pyyaml
 requests
 openai
+nltk
