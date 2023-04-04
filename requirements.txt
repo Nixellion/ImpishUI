@@ -3,3 +3,5 @@ pyyaml
 requests
 openai
 nltk
+sumy
+colorama

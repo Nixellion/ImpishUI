@@ -1,12 +1,12 @@
 import os
 
 APP_DIR = realPath = os.path.dirname(os.path.realpath(__file__))
-CONFIG_DIR = APP_DIR
+CONFIG_DIR = os.path.join(APP_DIR, "config")
 CACHE_DIR = os.path.join(APP_DIR, "cache")
+DATA_DIR = os.path.join(APP_DIR, "data",)
+DATABASE_PATH = os.path.join(DATA_DIR, "database.db")
 
-# THUMBNAIL_CACHE_DIR = os.path.join(APP_DIR, 'cache', 'thumbnails')
-
-for d in [CACHE_DIR]:
+for d in [CACHE_DIR, DATA_DIR, CONFIG_DIR]:
     if not os.path.exists(d):
         try:
             os.makedirs(d)

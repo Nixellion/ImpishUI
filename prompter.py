@@ -1,3 +1,5 @@
+from enum import Enum
+
 LLAMA_PROMPT_DICT = {
     "prompt_input":
         """Below is an instruction that describes a task, paired with an input that provides further context. 
@@ -24,9 +26,17 @@ Write a response that appropriately completes the request.
 
 }
 
+class PromptFormat(Enum):
+    SIMPLE = 10
+    INSTRUCT_LLAMA = 20
 
-def format_prompt(user_prompt, world_info=None, summary=None, instruction="Reply to this request", format="instruct_llama"):
-    if format == "instruct_llama":
+selected_global_format = PromptFormat.INSTRUCT_LLAMA
+
+def format_prompt(user_prompt, world_info=None, summary=None, instruction=None, format=None):
+    if format is None:
+        format = selected_global_format
+
+    if format == PromptFormat.INSTRUCT_LLAMA:
         prompt = ""
         if world_info is not None and world_info.strip():
             prompt += f"{world_info}\n\n"
@@ -38,12 +48,15 @@ def format_prompt(user_prompt, world_info=None, summary=None, instruction="Reply
             prompt += f"{user_prompt}\n\n"
 
         prompt = LLAMA_PROMPT_DICT["prompt_input"].format(
-            instruction=instruction,
+            instruction=instruction if instruction else "Reply",
             input=prompt
         )
 
     else:
         prompt = ""
+        if instruction is not None and world_info.strip():
+            prompt += f"{instruction}:"
+
         if world_info is not None and world_info.strip():
             prompt += f"{world_info}\n\n"
 
@@ -55,55 +68,56 @@ def format_prompt(user_prompt, world_info=None, summary=None, instruction="Reply
 
     return prompt
 
-# TODO There's place here to make it all more modular to allow adding more 'adapters' other than just openai and kobold
-def send_prompt(user_prompt, world_info=None, summary=None, attrs={
-    "temperature": 0.65,
-    "top_p": 0.9,
-    "max_context_length": 2048,
-    "max_length": 512,
-    "rep_pen": 3,
-    "rep_pen_range": 1024,
-    "rep_pen_slope": 0.7,
-    "frmttriminc": True
-},
-openai_summarize=False,
-openai_text=False
-):
-    TOKENS_LEFT = int(attrs['max_context_length'] - (count_tokens(user_prompt) + count_tokens(world_info)))
+# # TODO There's place here to make it all more modular to allow adding more 'adapters' other than just openai and kobold
+# def send_prompt(user_prompt, world_info=None, summary=None, attrs={
+#     "temperature": 0.65,
+#     "top_p": 0.9,
+#     "max_context_length": 2048,
+#     "max_length": 512,
+#     "rep_pen": 3,
+#     "rep_pen_range": 1024,
+#     "rep_pen_slope": 0.7,
+#     "frmttriminc": True
+# },
+# openai_summarize=False,
+# openai_text=False
+# ):  
+#     max_prompt_length = attrs['max_context_length'] - attrs['max_length']
+#     TOKENS_LEFT = int(max_prompt_length - (count_tokens(user_prompt) + count_tokens(world_info)))
 
-    summarize_func = summarize if openai_summarize is False else summarize_openai
-    if len(data_cache.get("plain_text_log", "")) > 0:
-        summary = summarize_func(data_cache.get("plain_text_log", ""),
-                                    max_total_tokens=max(TOKENS_LEFT, 64))
-    else:
-        summary = ""
+#     summarize_func = summarize if openai_summarize is False else summarize_openai
+#     if len(data_cache.get("plain_text_log", "")) > 0:
+#         summary = summarize_func(data_cache.get("plain_text_log", ""),
+#                                     max_total_tokens=max(TOKENS_LEFT, 64))
+#     else:
+#         summary = ""
 
-    prompt = format_prompt(user_prompt, world_info, summary, instruction=INSTRUCTION, format="instruct_llama" if USE_LLAMA_INSTRUCT_FORMAT else "")
-    kobold_args['prompt'] = prompt
-    print("=" * 80)
-    print(f"Prompt:\n{prompt}")
-    print("-" * 80)
+#     prompt = format_prompt(user_prompt, world_info, summary, instruction=INSTRUCTION, format="instruct_llama" if USE_LLAMA_INSTRUCT_FORMAT else "")
+#     kobold_args['prompt'] = prompt
+#     print("=" * 80)
+#     print(f"Prompt:\n{prompt}")
+#     print("-" * 80)
 
-    if not OPENAI_TEXT:
-        response = requests.post(config['kobold_url'] + "/api/v1/generate", json={
-            "prompt": prompt,
-            "temperature": TEMPERATURE,
-            "top_p": TOP_P,
-            "max_context_length": max_context,
-            "max_length": max_length,
-            "rep_pen": REPETITION_PENALTY,
-            "rep_pen_range": REPETITION_PENALTY,
-            "rep_pen_slope": REPETITION_PENALTY,
-            "frmttriminc": True
-        })
+#     if not OPENAI_TEXT:
+#         response = requests.post(config['kobold_url'] + "/api/v1/generate", json={
+#             "prompt": prompt,
+#             "temperature": TEMPERATURE,
+#             "top_p": TOP_P,
+#             "max_context_length": max_context,
+#             "max_length": max_length,
+#             "rep_pen": REPETITION_PENALTY,
+#             "rep_pen_range": REPETITION_PENALTY,
+#             "rep_pen_slope": REPETITION_PENALTY,
+#             "frmttriminc": True
+#         })
 
-        print(response.text)
-        response = response.json()['results'][0]['text']
+#         print(response.text)
+#         response = response.json()['results'][0]['text']
 
-    else:
-        response = oai.raw_generate(prompt, model=config['openai_model'],
-                                    max_tokens=max_length)
-    print(f"Response:\n{response}")
-    print("=" * 80)
+#     else:
+#         response = oai.raw_generate(prompt, model=config['openai_model'],
+#                                     max_tokens=max_length)
+#     print(f"Response:\n{response}")
+#     print("=" * 80)
 
-    data_cache.set("plain_text_log", data_cache.get("plain_text_log", "") + response)
+#     data_cache.set("plain_text_log", data_cache.get("plain_text_log", "") + response)

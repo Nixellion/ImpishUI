@@ -1,16 +1,18 @@
-from adapters import AdapterBase
-
+from adapters import AdapterBase, AdapterCapability
 import openai
-from random import uniform
-
-from configuration import config
-TOKEN = config['openai_token']
-openai.api_key = TOKEN
 
 
-class OpenAI_Adapter(AdapterBase):
-    # region Attributes that should be in all adapters
-    NAME = "OpenAI"
+# region Attributes that should be in all adapters
+NAME = "OpenAI"
+
+CAPABILITIES = [
+    AdapterCapability.TEXT_GENERATION,
+    AdapterCapability.SUMMARIZATION
+]
+# endregion
+
+
+class Adapter(AdapterBase):
     ATTRIBUTES = {
         "model": {"type": str,
                   "default": "text-davinci-003"},
@@ -18,8 +20,6 @@ class OpenAI_Adapter(AdapterBase):
                   "default": "xx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                   "password": True},
     }
-    # endregion
-
     known_models = [
         "gpt-3.5-turbo",
         "text-davinci-003",
@@ -35,6 +35,9 @@ class OpenAI_Adapter(AdapterBase):
         "gpt-4-0314"
     ]
 
+    def __init__(self, attrs=None):
+        super().__init__(attrs)
+        openai.api_key = self.token
 
     def openai_memory_to_plaintext(self, prompt_messages):
         txt = ""
@@ -49,9 +52,9 @@ class OpenAI_Adapter(AdapterBase):
             completion = openai.ChatCompletion.create(
                 model=self.model,
                 messages=prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}],
-                max_tokens=kwargs['max_length'],
-                temperature=kwargs['temperature'],
-                top_p=kwargs['top_p'],
+                max_tokens=kwargs.get('max_length', 512),
+                temperature=kwargs.get('temperature', 0.5),
+                top_p=kwargs.get('top_p', 0.9),
                 frequency_penalty=0,
                 presence_penalty=0)
             response = completion.choices[0].message.content
@@ -62,11 +65,14 @@ class OpenAI_Adapter(AdapterBase):
             completion = openai.Completion.create(
                 engine=self.model,
                 prompt=prompt,
-                max_tokens=kwargs['max_length'],
-                temperature=kwargs['temperature'],
-                top_p=kwargs['top_p'],
+                max_tokens=kwargs.get('max_length', 512),
+                temperature=kwargs.get('temperature', 0.5),
+                top_p=kwargs.get('top_p', 0.9),
                 frequency_penalty=0,
                 presence_penalty=0)
 
             response = completion.choices[0].text
         return response
+
+    def summarize_chunk(self, text, **kwargs):
+        return self.generate(f"Summarize the following text:\n{text}")
