@@ -1,236 +1,245 @@
-# https://docs.streamlit.io/library/get-started/create-an-app
+#!/usr/bin/env python3
 
 
-import logging
 
-import streamlit as st
-from streamlit.components.v1 import html
-from functools import wraps
-import requests
-import traceback
+import asyncio
+from nicegui import ui, Client
+from ng_local_file_picker import local_file_picker
+from ng_adapter_settings import adapter_settings
+import adapters
+import prompter
+from database import Game, Settings, Message, Character, State
+from functools import partial
+from datetime import datetime
+from werkzeug.utils import secure_filename
 
+from paths import APP_DIR
 from configuration import config
 
-from datacache import data_cache
 
-from prompter import format_prompt
-
-from summarizer import summarize, summarize_openai, count_tokens
-from openai_requester import OpenAI
-
-
-
-# region Configure logger
-logging.basicConfig(format="\n%(asctime)s\n%(message)s", level=logging.INFO, force=True)
-# endregion
-
-# region Configure OpenAI
-oai = OpenAI()
+# region Logger
+import os
+from debug import get_logger
+log = get_logger(os.path.basename(os.path.realpath(__file__)))
 # endregion
 
 
-# region Define common templates
-html_temp = """
-                <div style="background-color:{};padding:1px">
-                
-                </div>
-                """
+# async def pick_file() -> None:
+#     result = await local_file_picker('~', multiple=True)
+#     ui.notify(f'You chose {result}')
+
+async def export_game() -> None:
+    export_filepath = os.path.join(APP_DIR, "data", secure_filename("game_export_{}_{}.txt".format(State.LOADED_GAME.name, datetime.now().strftime(r"%Y_%m_%d_%H_%M_%S"))))
+    with open(export_filepath, "w+", encoding="utf-8") as f:
+        f.write(State.LOADED_GAME.all_text)
+    ui.notify(f'Game exported to {export_filepath}')
 
 
-all_state_variables = [
-    ["text_error", ""],
-    ["user_prompt", ""],
-    ["n_requests", ""],
-    ["edit_mode", False],
-    ["memory", {}]
-    # ["plain_text_log", data_cache.get("plain_text_log", "")]
-]
+# contents = []
+# chat_container = None
+State.load_game(1)
+
+# TODO The fuck not working here
 
 
-def initialize_session_variables():
-    for key, value in all_state_variables:
-        if key not in st.session_state:
-            st.session_state[key] = value
+# here we use our custom page decorator directly and just put the content creation into a separate function
+
+def get_selected_adapter(adapter_dropdown):
+    return adapters.available_adapters[adapter_dropdown.value].Adapter()
+
+
+def convert_ui_settings(settings):
+    s = {}
+    for key, ui_element in settings.items():
+        s[key] = ui_element.value
+    return s
+
+
+# @ui.page('/')
+# async def index_page(client) -> None:
+# Yeah, NiceGUI while nice has it's quirks, like heavy context dependence, and so far I didn't find a way to move these functinos outside of this route function. But it works and looks fine for now.
+async def update_memory_text(message_id, textarea) -> None:
+    log.info(f"Updating message {message_id}.")
+    await update_selected_adapaters()
+    message = Message.select().where(Message.id == message_id).get()
+    message.text = textarea.value
+    message.save()
+    await reload_chat()
+    
+async def change_tokenizer() -> None:
+    State.TOKENIZER = tokenizer_name.value
+
+async def delete_memory_text(message_id) -> None:
+    log.info(f"Deleting message {message_id}.")
+    message = Message.select().where(Message.id == message_id).get()
+    message.delete_instance()
+    await reload_chat()
+
+async def reload_chat() -> None:
+    if not chat_container:
+        log.warning("Chat container not initialized yet.")
+        return
+    chat_container.clear()
+    chat_container_read.clear()
+    with chat_container:  # use the context of each client to update their ui
+        for record in State.LOADED_GAME.messages:
+            with ui.card().tight().classes('w-full no-wrap') as card:
+                textarea = ui.textarea(record.author, value=record.text).classes('text-sm m-2')
+                ui.label("Summary:")
+                summary_view = ui.markdown(f"{record.summary}").classes('text-sm m-2')
+                update_button = ui.button("Update", on_click=partial(update_memory_text, record.id, textarea))
+                delete_button = ui.button("Delete", on_click=partial(delete_memory_text, record.id))
+        # await ui.run_javascript(f'window.scrollTo(0, document.body.scrollHeight)', respond=False)
+    with chat_container_read:  # use the context of each client to update their ui
+        for record in State.LOADED_GAME.messages:
+            with ui.card().tight().classes('w-full no-wrap') as card:
+                markdown = ui.markdown(record.text).classes('text-sm m-2')
+        # await ui.run_javascript(f'window.scrollTo(0, document.body.scrollHeight)', respond=False)
+
+async def update_selected_adapaters():
+    log.debug("Updating adapter selection and settings...")
+    State.chosen_textgen_adapter = get_selected_adapter(textgen_adapter)
+    State.chosen_sum_adapter = get_selected_adapter(summarizer_adapter)
+
+    State.chosen_textgen_adapter.set_settings(convert_ui_settings(textgen_settings))
+    State.chosen_sum_adapter.set_settings(convert_ui_settings(summarizer_settings))
+
+    State.LOADED_GAME.summarizer = summarizer_adapter.value
+    State.LOADED_GAME.save()
+
+    State.SUM_ADAPTER = State.chosen_sum_adapter
+    State.TEMPLATE_NAME = textgen_prompt_format.value
+
+# TODO: This should be handled as "Heavy computation" https://github.com/zauberzeug/nicegui/blob/main/examples/progress/main.py
+async def send() -> None:
+    if State.BUSY:
+        log.warning("Server is still busy processing previous request!")
+        return
+    State.BUSY = True
+    State.progress_spinner.visible = True
+    try:
+        await update_selected_adapaters()
+
+        prompt = prompter.format_prompt(
+            user_prompt=user_prompt.value,
+            summary=State.LOADED_GAME.ai_summary_entries if summary_only_ai_messages.value else State.LOADED_GAME.all_summary_entries,
+            world_info=world_info.value,
+            instruction=instruction.value,
+            max_tokens=State.chosen_textgen_adapter.get_max_tokens(),
+            )
+        
+        # We add messages to database after, as to not include it in the summary when prompt is generated.
+        ai_response = State.chosen_textgen_adapter.generate(prompt)
+        State.LOADED_GAME.add_message(user_prompt.value, "You")
+        State.LOADED_GAME.add_message(ai_response, "Impish")
+
+        user_prompt.value = ''
+    except Exception as e:
+        log.error(e, exc_info=True)
+    State.BUSY = False
+    State.progress_spinner.visible = False
+    await reload_chat()
+    # await asyncio.gather(*[reload_chat(content) for content in contents])  # run updates concurrently
+
+# region Colors and Header
+ui.colors(primary='#faa300', secondary='#53B689', accent='#faa300', positive='#53B689')
+
+with ui.header().classes('justify-between text-white').style('background-color: #1c1c1c'):
+    ui.button(on_click=lambda: left_drawer.toggle()).props('flat color=white icon=menu')
+    ui.label('ImpishUI').classes('font-bold')
+    ui.button(on_click=lambda: right_drawer.toggle()).props('flat color=white icon=menu')
+# endregion
+
+# region Main Container
+# await client.connected()
+with ui.tabs().classes('w-full') as tabs:
+    ui.tab("Read")
+    ui.tab("Edit")
+        
+with ui.tab_panels(tabs, value='Read').classes('w-full').style('background-color: rgba(0,0,0,0)'):
+    with ui.tab_panel('Read').classes('w-full'):
+        chat_container_read = ui.column().classes('w-full max-w-4xl mx-auto')
+    with ui.tab_panel('Edit').classes('w-full'):
+        chat_container = ui.column().classes('w-full max-w-4xl mx-auto')
+    # ui.button('Choose file', on_click=pick_file).props('icon=folder')
+
+        # update(...) uses run_javascript which is only possible after connecting
+    
+    
+    # contents.append(ui.column().classes('w-full max-w-4xl mx-auto'))  # save ui context for updates
+    asyncio.run(reload_chat())  # ensure all messages are shown after connecting
+
+State.progress_spinner = ui.spinner()
+State.progress_spinner.visible = False
+# endregion
+
+# region Drawers
+with ui.left_drawer() as left_drawer:
+
+    text_generation_adapters = {}
+    summarization_adapters = {}
+    for adapter_name, adapter_module in adapters.available_adapters.items():
+        if adapters.AdapterCapability.TEXT_GENERATION in adapter_module.CAPABILITIES:
+            text_generation_adapters[adapter_name] = adapter_module.NAME
+        if adapters.AdapterCapability.SUMMARIZATION in adapter_module.CAPABILITIES:
+            summarization_adapters[adapter_name] = adapter_module.NAME
+
+    async def textgen_ui_update() -> None:
+        textgen_ui.clear()
+        with textgen_ui:
+            textgen_settings = adapter_settings(get_selected_adapter(textgen_adapter))
+        with textgen_adapter:
+            docstring = get_selected_adapter(textgen_adapter).__doc__
+            ui.tooltip(docstring if docstring else "No description provided for this adapter.")
+
+    textgen_adapter = ui.select(text_generation_adapters, value=list(summarization_adapters)[
+                                0], label='TextGen Adapter', on_change=textgen_ui_update)
+    with ui.expansion(f"Textgen settings", icon='gear') as textgen_ui:
+        textgen_settings = adapter_settings(get_selected_adapter(textgen_adapter))
+
+    textgen_prompt_format = ui.select(prompter.get_all_formats(), value=prompter.get_all_formats()[0], label='TextGen Prompt Format')
+
+    async def summarizer_ui_update() -> None:
+        summarizer_ui.clear()
+        with summarizer_ui:
+            summarizer_settings = adapter_settings(get_selected_adapter(summarizer_adapter))
+        with summarizer_adapter:
+            docstring = get_selected_adapter(summarizer_adapter).__doc__
+            ui.tooltip(docstring if docstring else "No description provided for this adapter.")
+
+    summarizer_adapter = ui.select(summarization_adapters, value=list(
+        summarization_adapters)[0], label='Summarization Adapter', on_change=summarizer_ui_update)
+    
+    with ui.expansion(f"Summarizer settings", icon='gear') as summarizer_ui:
+        summarizer_settings = adapter_settings(get_selected_adapter(summarizer_adapter))
+    tokenizer_name = ui.select(config['tokenizers'], value=list(
+        config['tokenizers'])[0], label='Tokenizer', on_change=change_tokenizer)
+    
+    summary_only_ai_messages = ui.switch("Include only AI messages in summary", value=False)
+    # export_game_button = ui.button('Export Game', on_click=export_game).props('icon=folder')
+    ui.button('Export Game', on_click=export_game).props('icon=folder')
+    
+    asyncio.run(textgen_ui_update())
+    asyncio.run(summarizer_ui_update())
+
+with ui.right_drawer() as right_drawer:
+    instruction = ui.textarea("Instruction", value="Continue writing a story")
+    world_info = ui.textarea("World Info")
+
+left_drawer.toggle()
+right_drawer.toggle()
+# endregion
+
+# region Footer
+with ui.footer().style('background-color: #1c1c1c'), ui.column().classes('w-full max-w-3xl mx-auto my-6'):
+    with ui.row().classes('w-full no-wrap items-center'):
+        user_prompt = ui.textarea(placeholder='Prompt').props('autofocus input-class=mx-3') \
+            .classes('w-full self-center')
+    ui.button("SEND", on_click=send)
 # endregion
 
 
-# region Define primary functions
-def session_limited(limit=1):
-    """
-    Decorator to prevent multiple requests, WIP
-    """
-    def decorator(function):
-        @wraps(function)
-        def wrapper(*args, **kwargs):
-            if st.session_state.n_requests >= limit:
-                st.session_state.text_error = "Too many requests. Please wait a few seconds."
-                logging.info(f"Session request limit reached: {st.session_state.n_requests}")
-                st.session_state.n_requests = 1
-                return
-            retval = function(*args, **kwargs)
-            return retval
-        return wrapper
-    return decorator
-
-
-def on_submit():
-    with text_spinner_placeholder:
-        with st.spinner("Please wait..."):
-            try:
-                data_cache.set("world_info", world_info)
-                TOKENS_LEFT = int(max_context - (count_tokens(user_prompt) + count_tokens(world_info)))
-
-                summarize_func = summarize if OPENAI_SUM is False else summarize_openai
-                if len(data_cache.get("plain_text_log", "")) > 0:
-                    summary = summarize_func(data_cache.get("plain_text_log", ""),
-                                             max_total_tokens=max(TOKENS_LEFT, 64))
-                else:
-                    summary = ""
-
-                data_cache.set("user_prompt", user_prompt)
-                data_cache.set("plain_text_log", data_cache.get("plain_text_log", "") + user_prompt)
-                data_cache.set("summary", summary)
-
-                prompt = format_prompt(user_prompt, world_info, summary, instruction=INSTRUCTION, format_name="instruct_llama" if USE_LLAMA_INSTRUCT_FORMAT else "")
-
-                print("=" * 80)
-                print(f"Prompt:\n{prompt}")
-                print("-" * 80)
-
-                if not OPENAI_TEXT:
-                    response = requests.post(config['kobold_url'] + "/api/v1/generate", json={
-                        "prompt": prompt,
-                        "temperature": TEMPERATURE,
-                        "top_p": TOP_P,
-                        "max_context_length": max_context,
-                        "max_length": MAX_TOKENS,
-                        "rep_pen": REPETITION_PENALTY,
-                        "rep_pen_range": REPETITION_PENALTY,
-                        "rep_pen_slope": REPETITION_PENALTY,
-                        "frmttriminc": True
-                    })
-
-                    print(response.text)
-                    response = response.json()['results'][0]['text']
-
-                else:
-                    response = oai.raw_generate(prompt, model=config['openai_model'],
-                                                max_tokens=MAX_TOKENS)
-                print(f"Response:\n{response}")
-                print("=" * 80)
-
-                data_cache.set("plain_text_log", data_cache.get("plain_text_log", "") + response)
-
-            except Exception as e:
-                st.session_state.text_error = str(e) + str(traceback.format_exc())
-                traceback.print_exc()
-
-
-# @session_limited(1)
-def on_clear():
-    with text_spinner_placeholder:
-        with st.spinner("Please wait..."):
-            data_cache.set("plain_text_log", "")
-
-
-def on_rewrite():
-    with text_spinner_placeholder:
-        with st.spinner("Please wait..."):
-            data_cache.set("plain_text_log", user_prompt)
-
-
-def on_edit_checkbox():
-    with text_spinner_placeholder:
-        with st.spinner("Please wait..."):
-            st.session_state.edit_mode = not edit
-
-
-def on_edit():
-    with text_spinner_placeholder:
-        with st.spinner("Please wait..."):
-            if edited_log:
-                data_cache.set("plain_text_log", edited_log)
-
-# endregion
-
-
-# region Stremlit UI
-st.set_page_config(page_title="ImpishUI")
-
-# Initnializing all required variables if they are not found in session state
-initialize_session_variables()
-
-
-with st.sidebar:
-    st.markdown("""
-    # About 
-    ImpishUI is a proof of concept UI for KoboldAI with focus on automatically summarizing previous text to fit as much relevant data as possible into each prompt, to help stay within prompt-length limits, while keeping AI LLM model on track. 
-    """)
-    st.markdown(html_temp.format("rgba(55, 53, 47, 0.16)"), unsafe_allow_html=True)
-    st.markdown("""
-    [Github](#)
-    """,
-                unsafe_allow_html=True,
-                )
-    st.markdown(html_temp.format("rgba(55, 53, 47, 0.16)"), unsafe_allow_html=True)
-
-    with st.expander("Settings:"):
-        try:
-            model_name = requests.get(config['kobold_url'] + "/api/v1/model").json()['result']
-        except Exception as e:
-            model_name = str(e)
-        st.markdown("""Model: {}""".format(
-            model_name
-        ))
-
-        max_context = st.slider("Max Context Length", min_value=512, max_value=2048, value=2048)
-        MAX_TOKENS = st.slider("Max Response Tokens", min_value=1, max_value=512, value=512)
-        TEMPERATURE = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.5)
-        TOP_P = st.slider("Top P", min_value=0.0, max_value=1.0, value=0.9)
-        REPETITION_PENALTY = st.slider("Repetition Penalty", min_value=1.0, max_value=5.0, value=3.0)
-        REP_PEN_RANGE = st.slider("Rep Pen Range", min_value=1.0, max_value=4096.0, value=950.0)
-        REP_PEN_SLOPE = st.slider("Rep Pen Slope", min_value=0.0, max_value=10.0, value=0.7)
-        # SUMMARIZE_PARTS = st.checkbox("Summarize Parts", value=False,
-        #                               help="Whether to summarize each part separately, or to summarize the entire thing.")
-        USE_LLAMA_INSTRUCT_FORMAT = st.checkbox("Use LLAMA Instruct format", value=True if "llama" in str(model_name).lower() or "alpaca"  in str(model_name).lower() else False, help="Enable this for LLAMA models.")
-        INSTRUCTION = st.text_input("Instruction", value="Continue the story", help="Instruction, mostly needed if LLAMA Instruct format is on.")
-        OPENAI_SUM = st.checkbox("Use OpenAI for summaries", value=False)
-        OPENAI_TEXT = st.checkbox("Use OpenAI for text", value=False)
-
-    st.markdown("# Summary\n" + data_cache.get("summary", ""))
-
-
-st.title('ImpishUI')
-
-if st.session_state.edit_mode:
-    edited_log = st.text_area("Edit Log", value=data_cache.get("plain_text_log", ""))
-    edited_log_button = st.button("Save Edits", on_click=on_edit)
+if config['nicegui']:
+    ui.run(**config['nicegui'])
 else:
-    st.markdown(data_cache.get("plain_text_log", ""))
-    edited_log = None
-
-text_spinner_placeholder = st.empty()
-if st.session_state.text_error:
-    st.error(st.session_state.text_error)
-
-# form = st.form("Write")
-world_info = st.text_area("World Info", value=data_cache.get(
-    "world_info", ""), help="This information will always persist at the beginning of each prompt. Try to keep it within a reasonable token length.")
-user_prompt = st.text_area("User Prompt", value=data_cache.get("user_prompt", ""))
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    submit = st.button("Submit", on_click=on_submit)
-
-with col2:
-    rewrite = st.button("Rewrite", on_click=on_rewrite)
-
-with col3:
-    clear = st.button("Clear", on_click=on_clear)
-
-with col4:
-    edit = st.checkbox("Edit", value=False, on_change=on_edit_checkbox)
-# endregion
-
-# streamlit run .\app.py
+    ui.run()
