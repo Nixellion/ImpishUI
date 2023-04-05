@@ -7,3 +7,5 @@ sumy
 colorama
 jinja2
 werkzeug
+spacy
+transformers
