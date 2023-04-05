@@ -1,7 +1,16 @@
 # ImpishUI
-Storywriting UI with support for KoboldAI and ChatGPT with automatic summarization.
+Writing UI with support for KoboldAI and ChatGPT with automatic summarization.
 
-Proof of concept.
+## Features
+
+- Automatic summarization that strifes to keep as much important information as it can within LLM context token limits
+- Adapter system that allows easily writing new text generation and summarization "plugins"
+- Included text generation adapters: KoboldAI, OpenAI
+- Included summarization adapters: KoboldAI, OpenAI, Sumy (fast)
+- Flexible prompt templating with Jinja2
+- SQLite database keeping your logs and all the important information
+- Export your chat\story logs to files
+- And more coming
 
 ## Prerequisites
 
@@ -18,8 +27,17 @@ You need `Python 3` and `pip` installed on your system.
 
 ## Screenshots
 
-![Screenshot](https://media.discordapp.net/attachments/874894021821087745/1090666325870919680/image.png?width=1920&height=837)
-![Screenshot](https://media.discordapp.net/attachments/874894021821087745/1090667034041405470/image.png?width=1786&height=905)
+![Screenshot](https://i.imgur.com/vbIfILv.png)
+![Screenshot](https://i.imgur.com/EiSSnoI.png)
+
+
+## Configuration
+
+Section is under WIP. 
+
+Check "prompt_templates" folder and jinja2 documentation to learn about how to add new prompts. Just create a new file with jinja2 extension and write your own prompt format.
+
+Pull requests with custom adapters and prompt formats are also welcome.
 
 ## TODO
 
@@ -36,4 +54,4 @@ You need `Python 3` and `pip` installed on your system.
 - [ ] Remember settings
 - [ ] Reading and Editing modes
 - [ ] Story export options
-- [ ] Extra functions and stuff for jinja prompts
+- [ ] ...
