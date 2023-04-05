@@ -1,6 +1,7 @@
 # https://nicegui.io/documentation#ui_run
 nicegui:
   dark: None
+  reload: False
 
 tokenizers:
   - elinas/llama-30b-int4

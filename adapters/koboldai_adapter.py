@@ -31,11 +31,11 @@ class Adapter(AdapterBase):
         },
         "top_p": {"type": float, "default": 0.9},
         "max_context_length": {"type": int, "default": 2048},
-        "max_length": {"type": int, "default": 512},
+        "max_length": {"type": int, "default": 256},
         "rep_pen": {"type": float, "default": 1},
         "rep_pen_range": {"type": int, "default": 1024},
-        "rep_pen_slope": {"type": float, "default": 0.7},
-        "frmttriminc": {"type": bool, "default": True}
+        "rep_pen_slope": {"type": float, "default": 0.7}
+        # "frmttriminc": {"type": bool, "default": True}
     }
 
     def __init__(self, attrs=None):
@@ -58,7 +58,15 @@ class Adapter(AdapterBase):
             "rep_pen": self.rep_pen,
             "rep_pen_range": self.rep_pen_range,
             "rep_pen_slope": self.rep_pen_slope,
-            "frmttriminc": self.frmttriminc
+            "disable_output_formatting": False,
+            #  When enabled, adds a leading space to your input if there is no trailing whitespace at the end of the previous action.
+            "frmtadsnsp": True,
+            # When enabled, removes some characters from the end of the output such that the output doesn't end in the middle of a sentence. If the output is less than one sentence long, does nothing.
+            "frmttriminc": True,
+            # When enabled, removes #/@%{}+=~|\^<> from the output.
+            "frmtrmspch": True,
+            # When enabled, replaces all occurrences of two or more consecutive newlines in the output with one newline.
+            "frmtrmblln": True
         }
 
         # Update with incoming values
@@ -67,6 +75,7 @@ class Adapter(AdapterBase):
         # Add prompt
         json_data['prompt'] = prompt
 
+        log.info(f"KoboldAI request: {json_data}")
         response = requests.post(self.url + "/api/v1/generate", json=json_data)
         log.info(response.text)
         log.info(f"-" * 80)
@@ -78,9 +87,31 @@ class Adapter(AdapterBase):
         log.info(f"KoboldAI Summarize: {text} to {max_tokens}")
         log.info(f"-" * 80)
 
-        prompt = format_prompt(text, instruction="Summarize", max_tokens=max_tokens)
-        json_data = kwargs
+        prompt = format_prompt(text, instruction="Summarize", max_tokens=self.max_context_length)
+        json_data = {
+            "prompt": prompt,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "max_context_length": self.max_context_length - max_tokens,
+            "max_length": max_tokens,
+            "rep_pen": self.rep_pen,
+            "rep_pen_range": self.rep_pen_range,
+            "rep_pen_slope": self.rep_pen_slope,
+            "disable_output_formatting": False,
+            #  When enabled, adds a leading space to your input if there is no trailing whitespace at the end of the previous action.
+            "frmtadsnsp": True,
+            # When enabled, removes some characters from the end of the output such that the output doesn't end in the middle of a sentence. If the output is less than one sentence long, does nothing.
+            "frmttriminc": True,
+            # When enabled, removes #/@%{}+=~|\^<> from the output.
+            "frmtrmspch": True,
+            # When enabled, replaces all occurrences of two or more consecutive newlines in the output with one newline.
+            "frmtrmblln": True
+        }
+
+        json_data.update(kwargs)
         json_data['prompt'] = prompt
+
+        log.info(f"KoboldAI request: {json_data}")
         response = requests.post(self.url + "/api/v1/generate", json=json_data)
         log.info(response.text)
         response = response.json()['results'][0]['text']

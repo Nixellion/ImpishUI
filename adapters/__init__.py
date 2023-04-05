@@ -48,13 +48,17 @@ class AdapterBase():
     def generate(self, prompt, **kwargs):
         pass
 
-    def summarize(self, text_to_summarize, max_tokens=150):
+    def summarize(self, text_to_summarize, max_tokens=150, tokens_percent=None, min_tokens=100):
+        """
+        tokens_percent will override max_tokens and calculate it based on percentage.
+        """
         text_to_summarize_tokens = self.count_tokens(text_to_summarize)
+        if tokens_percent:
+            max_tokens = max(min_tokens, int(text_to_summarize_tokens * tokens_percent))
 
         # It is very possible that text to summarize will be smaller than max_tokens, in which case - return as is.
         if text_to_summarize_tokens <= max_tokens:
             return text_to_summarize
-        
 
         max_tokens = int(min(max_tokens, text_to_summarize_tokens))
         

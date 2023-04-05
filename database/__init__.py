@@ -70,11 +70,20 @@ class Game(ImpishBaseModel):
 
     @property
     def all_text(self):
-        return "\n".join([message.text for message in self.messages])
+        return "\n\n".join([message.text for message in self.messages])
 
     @property
     def all_summary_entries(self):
-        return "\n".join([message.summary for message in self.messages])
+        return "\n\n".join([message.summary for message in self.messages])
+
+    @property
+    def ai_summary_entries(self):
+        messages = []
+        for message in self.messages:
+            if message.author.lower() == "impish":
+                messages.append(message.summary)
+
+        return "\n\n".join(messages)
 
 class Settings(ImpishBaseModel):
     data = JSONField()
@@ -94,7 +103,7 @@ class Message(ImpishBaseModel):
 
     def save(self, *args, **kwargs):
         log.info(f"Message {self.id} saved, summarizing...")
-        self.summary = self.game.get_summarizer().summarize(self.text, max_tokens=150)
+        self.summary = self.game.get_summarizer().summarize(self.text, tokens_percent=0.4, min_tokens=100)
         super(Message, self).save(*args, **kwargs)
 
 
@@ -105,6 +114,7 @@ class Character(ImpishBaseModel):
 
 
 class State():
+    BUSY: bool = False
     LOADED_GAME: Game = None
     TOKENIZER: str = config['tokenizers'][0]
     SUM_ADAPTER: adapters.AdapterBase = None

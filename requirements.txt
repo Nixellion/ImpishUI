@@ -6,3 +6,4 @@ nltk
 sumy
 colorama
 jinja2
+werkzeug
