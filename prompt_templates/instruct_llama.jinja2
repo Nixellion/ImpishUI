@@ -1,0 +1,11 @@
+Below is an instruction that describes a task. 
+Write a response that appropriately completes the request.
+
+### Instruction:
+{% if instruction %}{{instruction}}{% endif %}
+{% if world_info %}{{world_info}}
+{% endif %}{% if summary %}{{summary}}
+{% endif %}{% if user_prompt %}{{user_prompt}}
+{% endif %}
+
+### Response:

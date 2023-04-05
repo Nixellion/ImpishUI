@@ -1,4 +1,6 @@
 # from adapters import AdapterBase, AdapterCapability
+from enum import Enum
+
 from adapters import AdapterBase, AdapterCapability
 
 from sumy.parsers.plaintext import PlaintextParser
@@ -14,48 +16,37 @@ CAPABILITIES = [
 ]
 
 
-class Adapter(AdapterBase):
-    ATTRIBUTES = {
-    }
+class SumyAlgorithm(Enum):
+    LSA = 10
+    TextRank = 20
 
-    # def summarize(self, text, **kwargs):
-    #     return gensim_summarize(text, ratio = "")
+
+class Adapter(AdapterBase):
+    """
+    Fast local summarizer allowing you to perform summarizations using LSA or TextRank algorithms.
+    It's not nearly as good as what a Large Language Model would do, but it's incredibly fast.
+    """
+    ATTRIBUTES = {
+        "summarization_algorithm":
+        {
+            "type": SumyAlgorithm,
+            "default": SumyAlgorithm.LSA
+        }
+    }
 
     def __init__(self, attrs=None):
         super().__init__(attrs)
+        self.algorithms = {
+            SumyAlgorithm.LSA: LsaSummarizer(),
+            SumyAlgorithm.TextRank: TextRankSummarizer()
+        }
 
-
-    def summarize_chunk(self, text):
+    def summarize_chunk(self, text, max_tokens):
         summary_text = ""
-        # Create a plaintext parser
         parser = PlaintextParser.from_string(text, Tokenizer("english"))
-
-        # Create an LSA summarizer
-        summarizer = LsaSummarizer()
-
-        # Summarize the document with 3 sentences
-        summary = summarizer(parser.document, 3)
-
-        # Print the summary
-        for sentence in summary:
-            summary_text += str(sentence)
-
-
-        # =================
-
-        # Create a parser for the text
-        parser = PlaintextParser.from_string(text, Tokenizer("english"))
-
-        # Create a TextRank summarizer
-        summarizer = TextRankSummarizer()
-
-        # Set the language of the text
+        summarizer = self.algorithms[self.summarization_algorithm]
         summarizer.stop_words = "english"
-
-        # Set the number of sentences in the summary
-        summary = summarizer(parser.document, sentences_count=3)
-
-        # Print the summary
+        summary = summarizer(parser.document, 3) # TODO: Sentences count should not be hardcoded like this
         for sentence in summary:
             summary_text += str(sentence)
 

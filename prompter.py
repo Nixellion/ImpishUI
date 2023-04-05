@@ -1,123 +1,85 @@
+import os
 from enum import Enum
+from jinja2 import Environment, BaseLoader
+from nltk.tokenize import word_tokenize
+from transformers import AutoTokenizer, LlamaTokenizer
+from paths import PROMPT_TEMPLATES_DIR
 
-LLAMA_PROMPT_DICT = {
-    "prompt_input":
-        """Below is an instruction that describes a task, paired with an input that provides further context. 
-Write a response that appropriately completes the request.
+from database import State
+
+# region Logger
+from debug import get_logger
+log = get_logger(os.path.basename(os.path.realpath(__file__)))
+# endregion
+
+def get_all_formats():
+    templates = []
+    for x in os.listdir(PROMPT_TEMPLATES_DIR):
+        name, ext = os.path.splitext(x)
+        if ext.lower() == ".jinja2":
+            templates.append(name)
+    return templates
+
+def load_selected_template_string():
+    with open(os.path.join(PROMPT_TEMPLATES_DIR, f"{State.TEMPLATE_NAME}.jinja2"), "r", encoding="utf-8") as f:
+        template_string = f.read()
+    return template_string
+
+def render_template_string(**context):
+    template_string = load_selected_template_string()
+    rtemplate = Environment(loader=BaseLoader).from_string(template_string)
+    return rtemplate.render(**context)
+
+def current_template_string_tokens():
+    template_string = load_selected_template_string()
+    return count_tokens(template_string)
 
 
-### Instruction:
-
-{instruction}
-
-### Input:
-{input}
-
-### Response:""",
-    "prompt_no_input":
-        """Below is an instruction that describes a task. 
-Write a response that appropriately completes the request.
-
-
-### Instruction:
-{instruction}
-
-### Response:"""
-
-}
-
-class PromptFormat(Enum):
-    SIMPLE = 10
-    INSTRUCT_LLAMA = 20
-
-selected_global_format = PromptFormat.INSTRUCT_LLAMA
-
-def format_prompt(user_prompt, world_info=None, summary=None, instruction=None, format=None):
-    if format is None:
-        format = selected_global_format
-
-    if format == PromptFormat.INSTRUCT_LLAMA:
-        prompt = ""
-        if world_info is not None and world_info.strip():
-            prompt += f"{world_info}\n\n"
-
-        if summary is not None and summary.strip():
-            prompt += f"\n{summary}\n\n"
-
-        if user_prompt is not None and user_prompt.strip():
-            prompt += f"{user_prompt}\n\n"
-
-        prompt = LLAMA_PROMPT_DICT["prompt_input"].format(
-            instruction=instruction if instruction else "Reply",
-            input=prompt
-        )
-
+def count_tokens(text):
+    if State.TOKENIZER == "nltk":
+        return len(word_tokenize(text))
     else:
-        prompt = ""
-        if instruction is not None and world_info.strip():
-            prompt += f"{instruction}:"
+        tokenizer = AutoTokenizer.from_pretrained(State.TOKENIZER)
+        tokens = tokenizer.tokenize(text)
+        return len(tokens)
 
-        if world_info is not None and world_info.strip():
-            prompt += f"{world_info}\n\n"
+def count_used_tokens(*args):
+    all_text = "".join([str(arg) for arg in args])
+    return count_tokens(all_text)
 
-        if summary is not None and summary.strip():
-            prompt += f"Story so far:\n{summary}\n\n"
+def format_prompt(user_prompt, world_info="", summary="", instruction="", max_tokens=None):
+    """
+    This is where the magic happens!
+    """
+    log.info(f"Formatting prompt ({max_tokens}; {user_prompt}; {world_info}; {summary}; {instruction}): {user_prompt}")
+    used_tokens = count_used_tokens(current_template_string_tokens(), user_prompt, world_info)
+    tokens_remaining = max_tokens - used_tokens
 
-        if user_prompt is not None and user_prompt.strip():
-            prompt += f"{instruction}:\n{user_prompt}\n\n"
+    if summary.strip():
+        summary_tokens = count_tokens(summary)
+        if summary_tokens >= tokens_remaining:
+            log.info(f"Prompt with summary is taking too many tokens, trying to summarize it ({summary_tokens} with {max_tokens} limit and {tokens_remaining} remaining)")
+            summary = State.SUM_ADAPTER.summarize(summary, tokens_remaining)
+            summary_tokens = count_tokens(summary)
+            log.info(f"Summarized to: {summary_tokens}")
 
+            used_tokens = count_used_tokens(current_template_string_tokens(), user_prompt, world_info, summary)
+            tokens_remaining = max_tokens - used_tokens
+            if world_info.strip() and used_tokens > max_tokens:
+                log.info(f"Still too many tokens ({used_tokens} of {max_tokens}), summarizing World Info...")
+                world_info = State.SUM_ADAPTER.summarize(summary, count_tokens(world_info) - (abs(used_tokens - max_tokens) * 1.25))
+
+    # Selected scring is chosen from global selection State
+    prompt = render_template_string(
+        user_prompt=user_prompt,
+        world_info=world_info,
+        summary=summary,
+        instruction=instruction
+    )
+
+    tokens_used = count_tokens(prompt)
+
+    log.info(f"Formatted prompt: {prompt}")
+    log.info(f"Formatted prompt tokens {tokens_used} out of {max_tokens} allowed used.")
     return prompt
 
-# # TODO There's place here to make it all more modular to allow adding more 'adapters' other than just openai and kobold
-# def send_prompt(user_prompt, world_info=None, summary=None, attrs={
-#     "temperature": 0.65,
-#     "top_p": 0.9,
-#     "max_context_length": 2048,
-#     "max_length": 512,
-#     "rep_pen": 3,
-#     "rep_pen_range": 1024,
-#     "rep_pen_slope": 0.7,
-#     "frmttriminc": True
-# },
-# openai_summarize=False,
-# openai_text=False
-# ):  
-#     max_prompt_length = attrs['max_context_length'] - attrs['max_length']
-#     TOKENS_LEFT = int(max_prompt_length - (count_tokens(user_prompt) + count_tokens(world_info)))
-
-#     summarize_func = summarize if openai_summarize is False else summarize_openai
-#     if len(data_cache.get("plain_text_log", "")) > 0:
-#         summary = summarize_func(data_cache.get("plain_text_log", ""),
-#                                     max_total_tokens=max(TOKENS_LEFT, 64))
-#     else:
-#         summary = ""
-
-#     prompt = format_prompt(user_prompt, world_info, summary, instruction=INSTRUCTION, format="instruct_llama" if USE_LLAMA_INSTRUCT_FORMAT else "")
-#     kobold_args['prompt'] = prompt
-#     print("=" * 80)
-#     print(f"Prompt:\n{prompt}")
-#     print("-" * 80)
-
-#     if not OPENAI_TEXT:
-#         response = requests.post(config['kobold_url'] + "/api/v1/generate", json={
-#             "prompt": prompt,
-#             "temperature": TEMPERATURE,
-#             "top_p": TOP_P,
-#             "max_context_length": max_context,
-#             "max_length": max_length,
-#             "rep_pen": REPETITION_PENALTY,
-#             "rep_pen_range": REPETITION_PENALTY,
-#             "rep_pen_slope": REPETITION_PENALTY,
-#             "frmttriminc": True
-#         })
-
-#         print(response.text)
-#         response = response.json()['results'][0]['text']
-
-#     else:
-#         response = oai.raw_generate(prompt, model=config['openai_model'],
-#                                     max_tokens=max_length)
-#     print(f"Response:\n{response}")
-#     print("=" * 80)
-
-#     data_cache.set("plain_text_log", data_cache.get("plain_text_log", "") + response)

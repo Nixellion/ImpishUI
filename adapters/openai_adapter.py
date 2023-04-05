@@ -48,7 +48,7 @@ class Adapter(AdapterBase):
         return txt
 
     def generate(self, prompt, **kwargs):
-        if self.model in OpenAI_Adapter.chat_models:
+        if self.model in self.chat_models:
             completion = openai.ChatCompletion.create(
                 model=self.model,
                 messages=prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}],
@@ -74,5 +74,5 @@ class Adapter(AdapterBase):
             response = completion.choices[0].text
         return response
 
-    def summarize_chunk(self, text, **kwargs):
+    def summarize_chunk(self, text, max_tokens, **kwargs):
         return self.generate(f"Summarize the following text:\n{text}")

@@ -4,8 +4,10 @@ import json
 from datetime import datetime
 from peewee import *
 from playhouse.sqlite_ext import SqliteExtDatabase, JSONField  # , FTS5Model, SearchField
-from configuration import read_config, write_config
+from configuration import config
 from paths import DATABASE_PATH
+import adapters
+
 
 from adapters.sumy_adapter import Adapter as SumyAdapter
 # endregion
@@ -23,6 +25,7 @@ db = SqliteExtDatabase(DATABASE_PATH, pragmas=pragmas)
 
 
 # region ############################# TABLE CLASSES #############################
+
 
 class ImpishBaseModel(Model):
     date_created = DateTimeField()
@@ -48,12 +51,22 @@ class ImpishBaseModel(Model):
 
 
 class Game(ImpishBaseModel):
-    filename = TextField()
+    name = CharField()
+    summarizer = CharField(null=True)
 
+    def add_message(self, text, author=""):
+        message = Message()
+        message.author = author
+        message.text = text
+        message.game = self
+        message.save()
 
-class Settings(ImpishBaseModel):
-    data = JSONField()
-    game = ForeignKeyField(Game, backref="messages")
+    def get_summarizer(self):
+        if self.summarizer is None:
+            # Get and return last adapter
+            return adapters.available_adapters[list(adapters.available_adapters)[-1]].Adapter()
+        # Get and return adapter by name
+        return adapters.available_adapters[self.summarizer].Adapter()
 
     @property
     def all_text(self):
@@ -63,24 +76,27 @@ class Settings(ImpishBaseModel):
     def all_summary_entries(self):
         return "\n".join([message.summary for message in self.messages])
 
+class Settings(ImpishBaseModel):
+    data = JSONField()
+    game = ForeignKeyField(Game, backref="messages")
+
+    
+
 
 class Message(ImpishBaseModel):
-    author = CharField()  
+    author = CharField()
     text = TextField()
     summary = TextField()
     game = ForeignKeyField(Game, backref="messages")
 
-    def add(self, text, author="", summarizer=None):
-        if summarizer is None:
-            summarizer = SumyAdapter()
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
-        self.messages.append(
-            {
-                "author": author,
-                "text": text,
-                "summary": summarizer.summarize(text, max_tokens=150)
-            }
-        )
+    def save(self, *args, **kwargs):
+        log.info(f"Message {self.id} saved, summarizing...")
+        self.summary = self.game.get_summarizer().summarize(self.text, max_tokens=150)
+        super(Message, self).save(*args, **kwargs)
+
 
 class Character(ImpishBaseModel):
     name = CharField()
@@ -88,11 +104,25 @@ class Character(ImpishBaseModel):
     state = TextField()
 
 
+class State():
+    LOADED_GAME: Game = None
+    TOKENIZER: str = config['tokenizers'][0]
+    SUM_ADAPTER: adapters.AdapterBase = None
+    TEMPLATE_NAME: str = "instruct_llama_with_input"
+
+    def load_game(game_id):
+        State.LOADED_GAME = Game.select().where(Game.id == game_id).get()
+
 log.info(" ".join(["Using DB", str(db), "At path:", str(DATABASE_PATH)]))
 
 # On init make sure we create database
 
 db.connect()
 db.create_tables([Game, Settings, Message])
+
+if len(Game.select()) == 0:
+    game = Game()
+    game.name = "default"
+    game.save()
 
 # endregion

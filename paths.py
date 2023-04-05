@@ -5,8 +5,9 @@ CONFIG_DIR = os.path.join(APP_DIR, "config")
 CACHE_DIR = os.path.join(APP_DIR, "cache")
 DATA_DIR = os.path.join(APP_DIR, "data",)
 DATABASE_PATH = os.path.join(DATA_DIR, "database.db")
+PROMPT_TEMPLATES_DIR = os.path.join(APP_DIR, "prompt_templates")
 
-for d in [CACHE_DIR, DATA_DIR, CONFIG_DIR]:
+for d in [CACHE_DIR, DATA_DIR, CONFIG_DIR, PROMPT_TEMPLATES_DIR]:
     if not os.path.exists(d):
         try:
             os.makedirs(d)

@@ -141,3 +141,5 @@ dmypy.json
 config.yaml
 cache/*
 *.bkpy
+data/
+logs/

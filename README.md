@@ -29,7 +29,11 @@ You need `Python 3` and `pip` installed on your system.
 - [x] Improve responsiveness and formatting https://github.com/kinosal/tweet/blob/main/app.py
 - [x] Add "Edit" checkbox to edit text in place
 - [x] Cleanup code, check and upload
-- [ ] Create an alternate mode in which it summarizes stories in parts
-- [ ] Savegames
+- [x] Create an alternate mode in which it summarizes stories in parts
+- [x] Savegames
+- [ ] "Processing" state, locking UI and showing progress spinner or bar
+- [ ] Savegames UI, selecting and adding games
 - [ ] Remember settings
-- [ ] Fruther prompt generator improvements
+- [ ] Reading and Editing modes
+- [ ] Story export options
+- [ ] Extra functions and stuff for jinja prompts

@@ -1,13 +1,11 @@
 class A():
+    pass
 
-    def __init__(self):
-        print(self.ATTR)
-
-
-class B(A):
-    ATTR = "WORLD"
-    def __init__(self):
-        super().__init__()
+class B():
+    "DOC"
+    pass
 
 
-B()
+
+print(B.__doc__)
+print(A.__doc__)

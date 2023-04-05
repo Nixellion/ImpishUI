@@ -1,4 +1,10 @@
-# Copy this config to a file named "config.yaml" and adjust settings as you see fit
-openai_token: xx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-openai_model: "text-davinci-003"
-kobold_url: http://127.0.0.1:5000
+# https://nicegui.io/documentation#ui_run
+nicegui:
+  dark: None
+
+tokenizers:
+  - elinas/llama-30b-int4
+  - nltk
+  - bert-base-cased
+  - gpt2
+  - roberta-base

@@ -29,6 +29,9 @@ class AdapterBase():
     def __init__(self, attrs=None):
         self.set_settings()
 
+    def get_max_tokens(self):
+        return 2048-512
+
     def set_settings(self, attrs=None):
         log.debug(f"Set settings: {attrs}")
         if attrs is None:
@@ -39,24 +42,33 @@ class AdapterBase():
         for key, value in attrs.items():
             setattr(self, key, value)
 
-    def summarize_chunk(self, text):
+    def summarize_chunk(self, text, max_tokens):
         pass
 
     def generate(self, prompt, **kwargs):
         pass
 
     def summarize(self, text_to_summarize, max_tokens=150):
-        max_tokens = min(max_tokens, 512)
+        text_to_summarize_tokens = self.count_tokens(text_to_summarize)
+
+        # It is very possible that text to summarize will be smaller than max_tokens, in which case - return as is.
+        if text_to_summarize_tokens <= max_tokens:
+            return text_to_summarize
+        
+
+        max_tokens = int(min(max_tokens, text_to_summarize_tokens))
+        
         summary = None
 
         # Split text into chunks that can fit into most models and summarize each chunk
         try:
             chunks = [self.convert_to_detokenized_text(i) for i in self.break_up_text_to_chunks(text_to_summarize)]
+            tokens_per_chunk = int(max_tokens / len(chunks))
             summary = ""
             print(f"Chunks: {len(chunks)}")
             for i, chunk in enumerate(chunks):
                 log.debug(f"{i}: {chunk}")
-                summary_text = self.summarize_chunk(chunk)
+                summary_text = self.summarize_chunk(chunk, max_tokens=tokens_per_chunk)
                 if not summary_text:
                     log.warning(f"Summarize chunk returned empty response for this chunk: '{chunk}'")
                 log.debug(summary_text)
@@ -67,13 +79,14 @@ class AdapterBase():
             raise Exception(str(e) + traceback.format_exc())
 
         # Iteratively try to keep summarizing the text until it fits into the max tokens, but return as is if it's impossible
-        retries = 3
+        retries = 0
+        max_retries = 1
         success = False
-        while not success and retries < 5:
+        while not success and retries < max_retries:
             if self.count_tokens(summary) <= max_tokens:
                 break
 
-            summary = self.summarize_chunk(summary)
+            summary = self.summarize_chunk(summary, max_tokens=max_tokens)
             retries += 1
 
         return summary

@@ -91,7 +91,7 @@ def on_submit():
                 data_cache.set("plain_text_log", data_cache.get("plain_text_log", "") + user_prompt)
                 data_cache.set("summary", summary)
 
-                prompt = format_prompt(user_prompt, world_info, summary, instruction=INSTRUCTION, format="instruct_llama" if USE_LLAMA_INSTRUCT_FORMAT else "")
+                prompt = format_prompt(user_prompt, world_info, summary, instruction=INSTRUCTION, format_name="instruct_llama" if USE_LLAMA_INSTRUCT_FORMAT else "")
 
                 print("=" * 80)
                 print(f"Prompt:\n{prompt}")

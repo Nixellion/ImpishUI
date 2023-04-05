@@ -1,6 +1,6 @@
 import requests
 from adapters import AdapterBase, AdapterCapability
-from prompter import format_prompt, PromptFormat
+from prompter import format_prompt
 
 # region Logger
 import os
@@ -22,22 +22,27 @@ class Adapter(AdapterBase):
             "type": str,
             "default": "http://127.0.0.1:5000"
         },
-        "prompt_format":
-        {
-            "type": PromptFormat,
-            "default": PromptFormat.INSTRUCT_LLAMA
-        },
         "temperature":
         {
             "type": float,
             "default": 0.5,
             "min": 0.0,
             "max": 1.0
-        }
+        },
+        "top_p": {"type": float, "default": 0.9},
+        "max_context_length": {"type": int, "default": 2048},
+        "max_length": {"type": int, "default": 512},
+        "rep_pen": {"type": float, "default": 1},
+        "rep_pen_range": {"type": int, "default": 1024},
+        "rep_pen_slope": {"type": float, "default": 0.7},
+        "frmttriminc": {"type": bool, "default": True}
     }
 
     def __init__(self, attrs=None):
         super().__init__(attrs)
+
+    def get_max_tokens(self):
+        return self.max_context_length - self.max_length
 
     def generate(self, prompt, **kwargs):
         log.info(f"KoboldAI Prompt: {prompt}")
@@ -46,14 +51,14 @@ class Adapter(AdapterBase):
         # Default values
         json_data = {
             "prompt": prompt,
-            "temperature": 0.5,
-            "top_p": 0.9,
-            "max_context_length": 2048-512,
-            "max_length": 512,
-            "rep_pen": 1,
-            "rep_pen_range": 1024,
-            "rep_pen_slope": 0.7,
-            "frmttriminc": True
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "max_context_length": self.max_context_length - self.max_length,
+            "max_length": self.max_length,
+            "rep_pen": self.rep_pen,
+            "rep_pen_range": self.rep_pen_range,
+            "rep_pen_slope": self.rep_pen_slope,
+            "frmttriminc": self.frmttriminc
         }
 
         # Update with incoming values
@@ -69,11 +74,11 @@ class Adapter(AdapterBase):
         response = response.json()['results'][0]['text']
         return response
 
-    def summarize_chunk(self, text, **kwargs):
-        log.info(f"KoboldAI Summarize: {text}")
+    def summarize_chunk(self, text, max_tokens, **kwargs):
+        log.info(f"KoboldAI Summarize: {text} to {max_tokens}")
         log.info(f"-" * 80)
 
-        prompt = format_prompt(text, instruction="Summarize")
+        prompt = format_prompt(text, instruction="Summarize", max_tokens=max_tokens)
         json_data = kwargs
         json_data['prompt'] = prompt
         response = requests.post(self.url + "/api/v1/generate", json=json_data)
