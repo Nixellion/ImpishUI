@@ -15,7 +15,7 @@ import traceback
 import logging
 import logging.config
 import yaml
-from flask import Response, jsonify, render_template
+# from flask import Response, jsonify, render_template
 import functools
 
 from colorama import just_fix_windows_console, Fore, Back, Style
@@ -119,28 +119,28 @@ def catch_errors(f):
     return wrapped
 
 
-def catch_errors_json(f):
-    @functools.wraps(f)
-    def wrapped(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except Exception as e:
-            traceback.print_exc()
-            return jsonify({"error": str(e), "traceback": traceback.format_exc()})
+# def catch_errors_json(f):
+#     @functools.wraps(f)
+#     def wrapped(*args, **kwargs):
+#         try:
+#             return f(*args, **kwargs)
+#         except Exception as e:
+#             traceback.print_exc()
+#             return jsonify({"error": str(e), "traceback": traceback.format_exc()})
 
-    return wrapped
+#     return wrapped
 
 
-def catch_errors_html(f):
-    @functools.wraps(f)
-    def wrapped(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except Exception as e:
-            traceback.print_exc()
-            return render_template("error.html", error=str(e), details=traceback.format_exc())
+# def catch_errors_html(f):
+#     @functools.wraps(f)
+#     def wrapped(*args, **kwargs):
+#         try:
+#             return f(*args, **kwargs)
+#         except Exception as e:
+#             traceback.print_exc()
+#             return render_template("error.html", error=str(e), details=traceback.format_exc())
 
-    return wrapped
+#     return wrapped
 
 
 if not logging_set_up:
