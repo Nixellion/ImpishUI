@@ -7,6 +7,8 @@ from playhouse.sqlite_ext import SqliteExtDatabase, JSONField  # , FTS5Model, Se
 from configuration import config
 from paths import DATABASE_PATH
 import adapters
+import nlp
+from state import State
 
 
 from adapters.sumy_adapter import Adapter as SumyAdapter
@@ -84,6 +86,17 @@ class Game(ImpishBaseModel):
                 messages.append(message.summary)
 
         return "\n\n".join(messages)
+    
+    def get_automatic_world_info(self, filters=None):
+        """
+        filters: Any text, if it containts the name it's info will be included (case insensitive).
+        """
+        persons = nlp.extract_persons_from_text(self.all_text)
+        text = ""
+        for person, description in persons.items():
+            if filters is None or person.lower() in filters.lower():
+                text += person + ":\n" + description + "\n\n"
+        return text
 
 class Settings(ImpishBaseModel):
     data = JSONField()
@@ -113,15 +126,8 @@ class Character(ImpishBaseModel):
     state = TextField()
 
 
-class State():
-    BUSY: bool = False
-    LOADED_GAME: Game = None
-    TOKENIZER: str = config['tokenizers'][0]
-    SUM_ADAPTER: adapters.AdapterBase = None
-    TEMPLATE_NAME: str = "instruct_llama_with_input"
-
-    def load_game(game_id):
-        State.LOADED_GAME = Game.select().where(Game.id == game_id).get()
+def load_game(game_id):
+    State.LOADED_GAME = Game.select().where(Game.id == game_id).get()
 
 log.info(" ".join(["Using DB", str(db), "At path:", str(DATABASE_PATH)]))
 

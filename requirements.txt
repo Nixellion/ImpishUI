@@ -9,3 +9,5 @@ jinja2
 werkzeug
 spacy
 transformers
+peewee
+sentencepiece

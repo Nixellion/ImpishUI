@@ -8,10 +8,11 @@ from ng_local_file_picker import local_file_picker
 from ng_adapter_settings import adapter_settings
 import adapters
 import prompter
-from database import Game, Settings, Message, Character, State
+from database import Game, Settings, Message, Character
 from functools import partial
 from datetime import datetime
 from werkzeug.utils import secure_filename
+from state import State
 
 from paths import APP_DIR
 from configuration import config
@@ -119,13 +120,15 @@ async def send() -> None:
     State.progress_spinner.visible = True
     try:
         await update_selected_adapaters()
-
+        persons_info = State.LOADED_GAME.get_automatic_world_info() # TODO: Add some filtering based on prompt and last X messages
         prompt = prompter.format_prompt(
             user_prompt=user_prompt.value,
             summary=State.LOADED_GAME.ai_summary_entries if summary_only_ai_messages.value else State.LOADED_GAME.all_summary_entries,
             world_info=world_info.value,
+            auto_world_info=persons_info,
             instruction=instruction.value,
             max_tokens=State.chosen_textgen_adapter.get_max_tokens(),
+            max_history_tokens=max_history_tokens.value
             )
         
         # We add messages to database after, as to not include it in the summary when prompt is generated.
@@ -216,6 +219,10 @@ with ui.left_drawer() as left_drawer:
         config['tokenizers'])[0], label='Tokenizer', on_change=change_tokenizer)
     
     summary_only_ai_messages = ui.switch("Include only AI messages in summary", value=False)
+
+    ui.label("Max history tokens:")
+    max_history_tokens = ui.slider(512, min=0, max=2048)
+
     # export_game_button = ui.button('Export Game', on_click=export_game).props('icon=folder')
     ui.button('Export Game', on_click=export_game).props('icon=folder')
     

@@ -9,6 +9,7 @@ import nltk
 nltk.download('punkt')
 from nltk.tokenize import word_tokenize
 
+from prompter import count_tokens
 
 # region Logger
 import os
@@ -52,7 +53,7 @@ class AdapterBase():
         """
         tokens_percent will override max_tokens and calculate it based on percentage.
         """
-        text_to_summarize_tokens = self.count_tokens(text_to_summarize)
+        text_to_summarize_tokens = count_tokens(text_to_summarize)
         if tokens_percent:
             max_tokens = max(min_tokens, int(text_to_summarize_tokens * tokens_percent))
 
@@ -87,7 +88,7 @@ class AdapterBase():
         max_retries = 1
         success = False
         while not success and retries < max_retries:
-            if self.count_tokens(summary) <= max_tokens:
+            if count_tokens(summary) <= max_tokens:
                 break
 
             summary = self.summarize_chunk(summary, max_tokens=max_tokens)
@@ -97,9 +98,6 @@ class AdapterBase():
 
     def word_tokenize(self, text):
         return word_tokenize(text)
-
-    def count_tokens(self, text):
-        return len(self.word_tokenize(text))
 
     def break_up_text(self, tokens, chunk_size, overlap_size):
         if len(tokens) <= chunk_size:

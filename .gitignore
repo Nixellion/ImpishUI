@@ -143,3 +143,5 @@ cache/*
 *.bkpy
 data/
 logs/
+
+tst_*

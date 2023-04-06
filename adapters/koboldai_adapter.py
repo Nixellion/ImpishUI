@@ -34,7 +34,8 @@ class Adapter(AdapterBase):
         "max_length": {"type": int, "default": 256},
         "rep_pen": {"type": float, "default": 1},
         "rep_pen_range": {"type": int, "default": 1024},
-        "rep_pen_slope": {"type": float, "default": 0.7}
+        "rep_pen_slope": {"type": float, "default": 0.7},
+        "summarizer_instruction": {"type": str, "default": "Summarize the following snippet. Don't just continue the story, summarize it."}
         # "frmttriminc": {"type": bool, "default": True}
     }
 
@@ -59,7 +60,7 @@ class Adapter(AdapterBase):
             "rep_pen_range": self.rep_pen_range,
             "rep_pen_slope": self.rep_pen_slope,
             "disable_output_formatting": False,
-            #  When enabled, adds a leading space to your input if there is no trailing whitespace at the end of the previous action.
+            # When enabled, adds a leading space to your input if there is no trailing whitespace at the end of the previous action.
             "frmtadsnsp": True,
             # When enabled, removes some characters from the end of the output such that the output doesn't end in the middle of a sentence. If the output is less than one sentence long, does nothing.
             "frmttriminc": True,
@@ -87,7 +88,7 @@ class Adapter(AdapterBase):
         log.info(f"KoboldAI Summarize: {text} to {max_tokens}")
         log.info(f"-" * 80)
 
-        prompt = format_prompt(text, instruction="Summarize", max_tokens=self.max_context_length)
+        prompt = format_prompt(text, instruction=self.summarizer_instruction, max_tokens=self.max_context_length)
         json_data = {
             "prompt": prompt,
             "temperature": self.temperature,
@@ -98,7 +99,7 @@ class Adapter(AdapterBase):
             "rep_pen_range": self.rep_pen_range,
             "rep_pen_slope": self.rep_pen_slope,
             "disable_output_formatting": False,
-            #  When enabled, adds a leading space to your input if there is no trailing whitespace at the end of the previous action.
+            # When enabled, adds a leading space to your input if there is no trailing whitespace at the end of the previous action.
             "frmtadsnsp": True,
             # When enabled, removes some characters from the end of the output such that the output doesn't end in the middle of a sentence. If the output is less than one sentence long, does nothing.
             "frmttriminc": True,
