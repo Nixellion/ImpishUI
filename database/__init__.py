@@ -1,14 +1,19 @@
 # region ############################# IMPORTS #############################
 import os
 import json
+import jsonpickle
 from datetime import datetime
 from peewee import *
 from playhouse.sqlite_ext import SqliteExtDatabase, JSONField  # , FTS5Model, SearchField
+from playhouse.fields import CompressedField
 from configuration import config
 from paths import DATABASE_PATH
 import adapters
 import nlp
 from state import State
+from paths import DATA_DIR
+from copy import copy
+
 
 
 from adapters.sumy_adapter import Adapter as SumyAdapter
@@ -54,21 +59,16 @@ class ImpishBaseModel(Model):
 
 class Game(ImpishBaseModel):
     name = CharField()
-    summarizer = CharField(null=True)
+    state_pickle = CompressedField(null=True, compression_level=9)
 
-    def add_message(self, text, author=""):
+    def add_message(self, text, author="", skip_summarization=False):
         message = Message()
         message.author = author
         message.text = text
         message.game = self
+        if not skip_summarization:
+            message.summarize()
         message.save()
-
-    def get_summarizer(self):
-        if self.summarizer is None:
-            # Get and return last adapter
-            return adapters.available_adapters[list(adapters.available_adapters)[-1]].Adapter()
-        # Get and return adapter by name
-        return adapters.available_adapters[self.summarizer].Adapter()
 
     @property
     def all_text(self):
@@ -87,16 +87,16 @@ class Game(ImpishBaseModel):
 
         return "\n\n".join(messages)
     
-    def get_automatic_world_info(self, filters=None):
+    def get_automatic_world_info(self):
         """
         filters: Any text, if it containts the name it's info will be included (case insensitive).
         """
-        persons = nlp.extract_persons_from_text(self.all_text)
-        text = ""
-        for person, description in persons.items():
-            if filters is None or person.lower() in filters.lower():
-                text += person + ":\n" + description + "\n\n"
-        return text
+        entities = State.instance.chosen_wi_extractor_adapter.extract_world_info(self.all_text)
+        # text = ""
+        # for entity, description in entities.items():
+        #     if filters is None or entity.lower() in filters.lower():
+        #         text += entity + ":\n" + description + "\n\n"
+        return entities
 
 class Settings(ImpishBaseModel):
     data = JSONField()
@@ -114,9 +114,13 @@ class Message(ImpishBaseModel):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
+    def summarize(self, tokens_percent=0.4, min_tokens=100):
+        log.info(f"Message {self.id} - summarizing...")
+        self.summary = State.instance.SUM_ADAPTER.summarize(self.text, tokens_percent=tokens_percent, min_tokens=min_tokens)
+
     def save(self, *args, **kwargs):
-        log.info(f"Message {self.id} saved, summarizing...")
-        self.summary = self.game.get_summarizer().summarize(self.text, tokens_percent=0.4, min_tokens=100)
+        log.info(f"Message {self.id} - saving...")
+        # self.summary = State.instance.SUM_ADAPTER.summarize(self.text, tokens_percent=0.4, min_tokens=100)
         super(Message, self).save(*args, **kwargs)
 
 
@@ -127,7 +131,16 @@ class Character(ImpishBaseModel):
 
 
 def load_game(game_id):
-    State.LOADED_GAME = Game.select().where(Game.id == game_id).get()
+    game = Game.select().where(Game.id == game_id).get()
+    if game.state_pickle is not None:
+        # FIXME: Recursion
+        try:
+            state_pickle = copy(game.state_pickle)
+            loaded_state = jsonpickle.decode(state_pickle.decode("utf-8"))
+            State.instance = loaded_state
+        except Exception as e:
+            log.warning(f"Failed loading UI state from db: {e}")
+    State.instance.LOADED_GAME = Game.select().where(Game.id == game_id).get()
 
 log.info(" ".join(["Using DB", str(db), "At path:", str(DATABASE_PATH)]))
 

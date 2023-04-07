@@ -41,6 +41,14 @@ class Adapter(AdapterBase):
             SumyAlgorithm.TextRank: TextRankSummarizer()
         }
 
+
+        # FIXME: Hack, should be fixed on UI side
+        temp = {}
+        for key, value in self.algorithms.items():
+            temp[key] = value
+            temp[key.value] = temp[key]
+        self.algorithms = temp
+
     def summarize_chunk(self, text, max_tokens):
         summary_text = ""
         parser = PlaintextParser.from_string(text, Tokenizer("english"))

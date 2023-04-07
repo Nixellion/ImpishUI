@@ -40,11 +40,17 @@ handlers:
 #        fallback_webhook_url: https://hooks.slack.com/services/x/x/x
 
 root:
-    level: DEBUG
+    level: ERROR
     handlers: [ console ]
 
 loggers:
     "default":
+        level: DEBUG
+    "app.py":
+        level: DEBUG
+    "database":
+        level: DEBUG
+    "adapters":
         level: DEBUG
 # Non root handlers are ADDED to root handlers. All extra loggers get whatever is in the root by default.
 # This is where all the duplicates were coming from.

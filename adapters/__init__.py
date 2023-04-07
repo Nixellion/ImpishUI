@@ -14,7 +14,7 @@ from prompter import count_tokens
 # region Logger
 import os
 from debug import get_logger
-log = get_logger(os.path.basename(os.path.realpath(__file__)))
+log = get_logger("adapters")
 # endregion
 
 
@@ -34,13 +34,19 @@ class AdapterBase():
         return 2048-512
 
     def set_settings(self, attrs=None):
-        log.debug(f"Set settings: {attrs}")
-        if attrs is None:
-            attrs = {}
-            for key, value in self.ATTRIBUTES.items():
-                attrs[key] = value["default"]
+        if attrs is not None:
+            log.debug(f"Set settings: {attrs}")
+        else:
+            log.debug("Set default adapter settings.")
+            
+        new_attrs = {}
+        for key, value in self.ATTRIBUTES.items():
+            new_attrs[key] = value["default"]
 
-        for key, value in attrs.items():
+        if attrs is not None:
+            new_attrs.update(attrs)
+
+        for key, value in new_attrs.items():
             setattr(self, key, value)
 
     def summarize_chunk(self, text, max_tokens):
@@ -49,6 +55,9 @@ class AdapterBase():
     def generate(self, prompt, **kwargs):
         pass
 
+    def extract_world_info(self, text):
+        pass
+    
     def summarize(self, text_to_summarize, max_tokens=150, tokens_percent=None, min_tokens=100):
         """
         tokens_percent will override max_tokens and calculate it based on percentage.
@@ -115,11 +124,18 @@ class AdapterBase():
         prompt_text = " ".join(tokenized_text)
         prompt_text = prompt_text.replace(" 's", "'s")
         return prompt_text
+    
+    def unload(self):
+        """
+        TODO: Create adapter unloading functionality for things that have a lot in memory, like tokenizers. IF NEEDED, maybe not? Will Python be able to handle it?
+        """
+        pass
 
 
 class AdapterCapability(Enum):
     TEXT_GENERATION = 10
     SUMMARIZATION = 20
+    WORLD_INFO_EXTRACTION = 30
 
 
 available_adapters = {}

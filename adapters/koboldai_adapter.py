@@ -5,7 +5,7 @@ from prompter import format_prompt
 # region Logger
 import os
 from debug import get_logger
-log = get_logger(os.path.basename(os.path.realpath(__file__)))
+log = get_logger("adapters")
 # endregion
 
 NAME = "KoboldAI"

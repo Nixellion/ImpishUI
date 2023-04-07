@@ -38,20 +38,3 @@ Section is under WIP.
 Check "prompt_templates" folder and jinja2 documentation to learn about how to add new prompts. Just create a new file with jinja2 extension and write your own prompt format.
 
 Pull requests with custom adapters and prompt formats are also welcome.
-
-## TODO
-
-- [x] Add World Info field that will be persistent throughout the story always prepended.
-- [x] Token length checks to dynamically expand and contract the prompt to fit the specified length
-- [x] openai_requester.py cleanup
-- [x] Improve responsiveness and formatting https://github.com/kinosal/tweet/blob/main/app.py
-- [x] Add "Edit" checkbox to edit text in place
-- [x] Cleanup code, check and upload
-- [x] Create an alternate mode in which it summarizes stories in parts
-- [x] Savegames
-- [ ] "Processing" state, locking UI and showing progress spinner or bar
-- [ ] Savegames UI, selecting and adding games
-- [ ] Remember settings
-- [ ] Reading and Editing modes
-- [ ] Story export options
-- [ ] ...

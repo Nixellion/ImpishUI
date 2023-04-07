@@ -6,7 +6,7 @@ nlp = spacy.load("en_core_web_sm")
 # region Logger
 import os
 from debug import get_logger
-log = get_logger(os.path.basename(os.path.realpath(__file__)))
+log = get_logger("default")
 # endregion
 
 def extract_persons_from_text(text):

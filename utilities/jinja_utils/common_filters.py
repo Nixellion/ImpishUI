@@ -3,7 +3,6 @@ Functions from this module are added to jinja's filters
 Make sure to add them to enabled_filters list
 """
 
-from jinja2 import Markup
 import prompter
 
 def trim_tokens(text, max_tokens):
