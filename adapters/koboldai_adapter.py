@@ -35,6 +35,7 @@ class Adapter(AdapterBase):
         "rep_pen": {"type": float, "default": 1},
         "rep_pen_range": {"type": int, "default": 1024},
         "rep_pen_slope": {"type": float, "default": 0.7},
+        "singleline": {"type": bool, "default": True},
         "summarizer_instruction": {"type": str, "default": "Summarize the following snippet. Don't just continue the story, summarize it."}
         # "frmttriminc": {"type": bool, "default": True}
     }
@@ -67,7 +68,8 @@ class Adapter(AdapterBase):
             # When enabled, removes #/@%{}+=~|\^<> from the output.
             "frmtrmspch": True,
             # When enabled, replaces all occurrences of two or more consecutive newlines in the output with one newline.
-            "frmtrmblln": True
+            "frmtrmblln": True,
+            "singleline": self.singleline
         }
 
         # Update with incoming values

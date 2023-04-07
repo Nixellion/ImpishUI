@@ -5,11 +5,13 @@ TODO:
 - [x] Reading and Editing modes
 
 
+- [ ] Per-paragraph generation, generate multiple paragraphs.
 - [ ] "Processing" state, locking UI and showing progress spinner or bar
 - [ ] Savegames UI, selecting and adding games
 - [ ] Remember settings (broken)
 - [ ] Story export options (formats, plaintext or smth)
 - [ ] Separate dedicated summarizer editor
+- [ ] Filtering of text
 
 - [ ] AND CHECK TODO, FIXME, BUG AND OTHER TAGS IN THE PROJECT (VSCODE TODOs extension or PyCharm can list them)
 """
@@ -29,6 +31,8 @@ from state import State
 
 from paths import APP_DIR
 from configuration import config
+
+from notifier import notify_sound
 
 
 # region Logger
@@ -106,6 +110,7 @@ async def rerun_memory_summarizer(message_id) -> None:
     message.save()
     State.instance.BUSY = False
     State.instance.progress_spinner.visible = False
+    notify_sound()
     await reload_chat()
 
 
@@ -140,7 +145,7 @@ async def reload_chat() -> None:
     with chat_container_read:  # use the context of each client to update their ui
         for record in State.instance.LOADED_GAME.messages:
             with ui.card().tight().classes('w-full no-wrap') as card:
-                markdown = ui.markdown(record.text).classes('text-sm m-2')
+                markdown = ui.html(record.text.replace("\n", "<br>")).classes('text-sm m-2')
         # await ui.run_javascript(f'window.scrollTo(0, document.body.scrollHeight)', respond=False)
 
 
@@ -174,37 +179,56 @@ async def send() -> None:
         return
     State.instance.BUSY = True
     State.instance.progress_spinner.visible = True
-    try:
-        update_selected_adapaters()
-        auto_world_info_entities = State.instance.LOADED_GAME.get_automatic_world_info()
-        prompt = prompter.format_prompt(
-            user_prompt=user_prompt.value,
-            summary=State.instance.LOADED_GAME.ai_summary_entries if summary_only_ai_messages.value else State.instance.LOADED_GAME.all_summary_entries,
-            world_info=world_info.value,
-            auto_world_info_entities=auto_world_info_entities,
-            instruction=instruction.value,
-            max_tokens=State.instance.chosen_textgen_adapter.get_max_tokens(),
-            max_history_tokens=max_history_tokens.value
-        )
-        ai_response = State.instance.chosen_textgen_adapter.generate(prompt)
+    final_ai_response = None
+    ai_response = None
+    message = None
+    print()
+    log.message("#"*80)
+    for i in range(0, int(paragraphs_to_generate.value)):
+        log.message(f"PARAGRAPH {i}...")
+        try:
+            update_selected_adapaters()
+            auto_world_info_entities = State.instance.LOADED_GAME.get_automatic_world_info()
+            prompt = prompter.format_prompt(
+                user_prompt=user_prompt.value if not ai_response else final_ai_response,
+                summary=State.instance.LOADED_GAME.ai_summary_entries if summary_only_ai_messages.value else State.instance.LOADED_GAME.all_summary_entries,
+                world_info=world_info.value,
+                auto_world_info_entities=auto_world_info_entities,
+                instruction=instruction.value,
+                max_tokens=State.instance.chosen_textgen_adapter.get_max_tokens(),
+                max_history_tokens=max_history_tokens.value,
+                history=State.instance.LOADED_GAME.all_text
+            )
+            
+            log.message(f"PROMPT: {prompt}")
 
-        print()
-        log.message("#"*80)
-        log.message(f"PROMPT: {prompt}")
-        log.message("="*80)
-        log.message(f"RESPONSE: {prompt}")
-        log.message("#"*80)
-        print()
+            ai_response = State.instance.chosen_textgen_adapter.generate(prompt)
+            if final_ai_response is None:
+                final_ai_response = ai_response
+            else:
+                final_ai_response += "\n\n" + ai_response.strip()
 
-        # We add prompt to database after, as to not include it in the summary for this step.
-        State.instance.LOADED_GAME.add_message(user_prompt.value, "You")
-        State.instance.LOADED_GAME.add_message(ai_response, "Impish")
+            
+            log.message("="*80)
+            log.message(f"RESPONSE: {ai_response}")
 
-        user_prompt.value = ''
-    except Exception as e:
-        log.error(e, exc_info=True)
+            user_prompt.value = ''
+        except Exception as e:
+            log.error(e, exc_info=True)
+    
+
+    State.instance.LOADED_GAME.add_message(user_prompt.value, "You")
+    message = State.instance.LOADED_GAME.add_message(final_ai_response.strip(), "Impish")
+
+    
+    
+
+    log.message("#"*80)
+    print()
+    
     State.instance.BUSY = False
     State.instance.progress_spinner.visible = False
+    notify_sound()
     await reload_chat()
     # await asyncio.gather(*[reload_chat(content) for content in contents])  # run updates concurrently
 
@@ -307,6 +331,7 @@ with ui.left_drawer() as left_drawer:
     # endregion
 
     summary_only_ai_messages = ui.switch("Include only AI messages in summary", value=False)
+    paragraphs_to_generate = ui.number("Pargraphs to generate", value=3)
 
     with ui.row():
         ui.label("Max history tokens:")
