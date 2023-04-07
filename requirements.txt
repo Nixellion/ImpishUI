@@ -12,3 +12,4 @@ transformers
 peewee
 sentencepiece
 jsonpickle
+playsound
