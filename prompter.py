@@ -35,7 +35,7 @@ def load_selected_template_string():
 def render_template_string(**context):
     template_string = load_selected_template_string()
 
-    env = Environment(autoescape=True, loader=BaseLoader)
+    env = Environment(autoescape=True, loader=BaseLoader, trim_blocks=True, lstrip_blocks=True)
 
     # region Injecting global variables, functions and filters
     for filter_function in common_filters.enabled_filters:
@@ -100,6 +100,12 @@ def format_prompt(user_prompt, world_info="", auto_world_info_entities={}, summa
     This is where the magic happens!
     """
     log.info(f"Formatting prompt ({max_tokens}; {user_prompt}; {world_info}; {summary}; {instruction}): {user_prompt}")
+
+    # Cleanup unwanted stuff
+    user_prompt = user_prompt.strip()
+    history = history.strip()
+    summary = summary.strip()
+    instruction = instruction.strip()
 
     # We tring history by allowed tokens, from the start
     history = trim_text_by_tokens(history, max_history_tokens)
