@@ -24,6 +24,10 @@ def extract_persons_from_text(text):
             if name not in persons:
                 persons[name] = ""
             persons[name] += f" {name} {desc}."
+
+    # Cleanup
+    for name, desc in persons.items():
+        persons[name] = desc.strip()
     # for person, desc in persons.items():
     #     print("="*80)
     #     print(person)
