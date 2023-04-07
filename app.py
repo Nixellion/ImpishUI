@@ -170,9 +170,13 @@ def update_selected_adapaters():
     State.instance.TEMPLATE_NAME = textgen_prompt_format.value
     
 
+
+async def summarization_playground_process():
+    update_selected_adapaters()
+    summarization_playground_output.set_content(State.instance.SUM_ADAPTER.summarize(summarization_playground_input.value).replace("\n", "<br>"))
+    
+
 # TODO: This should be handled as "Heavy computation" https://github.com/zauberzeug/nicegui/blob/main/examples/progress/main.py
-
-
 async def send() -> None:
     if State.instance.BUSY:
         log.warning("Server is still busy processing previous request!")
@@ -184,17 +188,17 @@ async def send() -> None:
     message = None
     print()
     log.message("#"*80)
+    update_selected_adapaters()
     for i in range(0, int(paragraphs_to_generate.value)):
         log.message(f"PARAGRAPH {i}...")
         try:
-            update_selected_adapaters()
             auto_world_info_entities = State.instance.LOADED_GAME.get_automatic_world_info()
             prompt = prompter.format_prompt(
-                user_prompt=user_prompt.value if not ai_response else final_ai_response,
+                user_prompt=user_prompt.value if i == 0 else user_prompt.value + "\n\n" + final_ai_response,
                 summary=State.instance.LOADED_GAME.ai_summary_entries if summary_only_ai_messages.value else State.instance.LOADED_GAME.all_summary_entries,
                 world_info=world_info.value,
                 auto_world_info_entities=auto_world_info_entities,
-                instruction=instruction.value,
+                instruction=instruction.value if i == 0 else "Continue your previous response.",
                 max_tokens=State.instance.chosen_textgen_adapter.get_max_tokens(),
                 max_history_tokens=max_history_tokens.value,
                 history=State.instance.LOADED_GAME.all_text
@@ -203,7 +207,7 @@ async def send() -> None:
             log.message(f"PROMPT: {prompt}")
 
             ai_response = State.instance.chosen_textgen_adapter.generate(prompt)
-            if final_ai_response is None:
+            if i == 0:
                 final_ai_response = ai_response
             else:
                 final_ai_response += "\n\n" + ai_response.strip()
@@ -212,7 +216,6 @@ async def send() -> None:
             log.message("="*80)
             log.message(f"RESPONSE: {ai_response}")
 
-            user_prompt.value = ''
         except Exception as e:
             log.error(e, exc_info=True)
     
@@ -225,7 +228,7 @@ async def send() -> None:
 
     log.message("#"*80)
     print()
-    
+    user_prompt.value = ''
     State.instance.BUSY = False
     State.instance.progress_spinner.visible = False
     notify_sound()
@@ -246,12 +249,15 @@ with ui.header().classes('justify-between text-white').style('background-color: 
 with ui.tabs().classes('w-full') as tabs:
     ui.tab("Read")
     ui.tab("Edit")
+    ui.tab("Summarization Playground")
 
 with ui.tab_panels(tabs, value='Read').classes('w-full').style('background-color: rgba(0,0,0,0)'):
     with ui.tab_panel('Read').classes('w-full'):
         chat_container_read = ui.column().classes('w-full max-w-4xl mx-auto')
     with ui.tab_panel('Edit').classes('w-full'):
         chat_container = ui.column().classes('w-full max-w-4xl mx-auto')
+    with ui.tab_panel('Summarization Playground').classes('w-full'):
+        summarization_playground_container = ui.column().classes('w-full max-w-4xl mx-auto')
     # ui.button('Choose file', on_click=pick_file).props('icon=folder')
 
         # update(...) uses run_javascript which is only possible after connecting
@@ -350,6 +356,11 @@ with ui.right_drawer() as right_drawer:
 
 left_drawer.toggle()
 right_drawer.toggle()
+
+with summarization_playground_container:
+    summarization_playground_input = ui.textarea("Input:").classes('w-full no-wrap')
+    summarization_playground_output = ui.html().classes('w-full no-wrap')
+    ui.button("Summarize", on_click=summarization_playground_process)
 # endregion
 
 # region Footer
