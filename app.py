@@ -41,6 +41,10 @@ from debug import get_logger
 log = get_logger(os.path.basename(os.path.realpath(__file__)))
 # endregion
 
+database.load_game(1)
+# region Main UI functions
+# TODO Separate async vs non async or smth
+
 
 # async def pick_file() -> None:
 #     result = await local_file_picker('~', multiple=True)
@@ -56,7 +60,7 @@ async def export_game() -> None:
 
 # contents = []
 # chat_container = None
-database.load_game(1)
+
 
 # here we use our custom page decorator directly and just put the content creation into a separate function
 
@@ -88,6 +92,7 @@ async def update_memory_text(message_id, textarea) -> None:
     State.instance.progress_spinner.visible = False
     await reload_chat()
 
+
 async def update_memory_summary_text(message_id, textarea) -> None:
     log.info(f"update_memory_summary_text {message_id}.")
     State.instance.BUSY = True
@@ -99,6 +104,7 @@ async def update_memory_summary_text(message_id, textarea) -> None:
     State.instance.BUSY = False
     State.instance.progress_spinner.visible = False
     await reload_chat()
+
 
 async def rerun_memory_summarizer(message_id) -> None:
     log.info(f"rerun_memory_summarizer {message_id}.")
@@ -112,7 +118,6 @@ async def rerun_memory_summarizer(message_id) -> None:
     State.instance.progress_spinner.visible = False
     notify_sound()
     await reload_chat()
-
 
 
 async def change_tokenizer() -> None:
@@ -138,8 +143,10 @@ async def reload_chat() -> None:
                 textarea = ui.textarea(record.author, value=record.text).classes('text-sm m-2')
                 summary_textarea = ui.textarea("Summary", value=f"{record.summary}").classes('text-sm m-2')
                 update_button = ui.button("Update Text", on_click=partial(update_memory_text, record.id, textarea))
-                update_summary_button = ui.button("Update Summary", on_click=partial(update_memory_summary_text, record.id, summary_textarea))
-                rerun_summarizer_button = ui.button("Rerun Summarizer", on_click=partial(rerun_memory_summarizer, record.id))
+                update_summary_button = ui.button("Update Summary", on_click=partial(
+                    update_memory_summary_text, record.id, summary_textarea))
+                rerun_summarizer_button = ui.button(
+                    "Rerun Summarizer", on_click=partial(rerun_memory_summarizer, record.id))
                 delete_button = ui.button("Delete", on_click=partial(delete_memory_text, record.id))
         # await ui.run_javascript(f'window.scrollTo(0, document.body.scrollHeight)', respond=False)
     with chat_container_read:  # use the context of each client to update their ui
@@ -168,13 +175,13 @@ def update_selected_adapaters():
     log.debug("# State.instance.SUM_ADAPTER = ...")
     State.instance.SUM_ADAPTER = State.instance.chosen_sum_adapter
     State.instance.TEMPLATE_NAME = textgen_prompt_format.value
-    
 
 
-async def summarization_playground_process():
+async def pg_summarize():
     update_selected_adapaters()
-    summarization_playground_output.set_content(State.instance.SUM_ADAPTER.summarize(summarization_playground_input.value).replace("\n", "<br>"))
-    
+    playground_output.set_content(State.instance.SUM_ADAPTER.summarize(
+        playground_input.value).replace("\n", "<br>"))
+
 
 # TODO: This should be handled as "Heavy computation" https://github.com/zauberzeug/nicegui/blob/main/examples/progress/main.py
 async def send() -> None:
@@ -187,7 +194,7 @@ async def send() -> None:
     ai_response = None
     message = None
     print()
-    log.message("#"*80)
+    log.message("#" * 80)
     update_selected_adapaters()
     for i in range(0, int(paragraphs_to_generate.value)):
         log.message(f"PARAGRAPH {i}...")
@@ -203,7 +210,7 @@ async def send() -> None:
                 max_history_tokens=max_history_tokens.value,
                 history=State.instance.LOADED_GAME.all_text
             )
-            
+
             log.message(f"PROMPT: {prompt}")
 
             ai_response = State.instance.chosen_textgen_adapter.generate(prompt)
@@ -212,21 +219,16 @@ async def send() -> None:
             else:
                 final_ai_response += "\n\n" + ai_response.strip()
 
-            
-            log.message("="*80)
+            log.message("=" * 80)
             log.message(f"RESPONSE: {ai_response}")
 
         except Exception as e:
             log.error(e, exc_info=True)
-    
 
     State.instance.LOADED_GAME.add_message(user_prompt.value, "You")
     message = State.instance.LOADED_GAME.add_message(final_ai_response.strip(), "Impish")
 
-    
-    
-
-    log.message("#"*80)
+    log.message("#" * 80)
     print()
     user_prompt.value = ''
     State.instance.BUSY = False
@@ -235,6 +237,18 @@ async def send() -> None:
     await reload_chat()
     # await asyncio.gather(*[reload_chat(content) for content in contents])  # run updates concurrently
 
+
+# region Playground-specific functions
+async def pg_load_game_text():
+    playground_input.set_value(State.instance.LOADED_GAME.all_text)
+
+async def pg_load_game_summary():
+    playground_input.set_value(State.instance.LOADED_GAME.all_summary_entries)
+
+# endregion
+
+
+# endregion
 # region Colors and Header
 ui.colors(primary='#faa300', secondary='#53B689', accent='#faa300', positive='#53B689')
 
@@ -249,15 +263,15 @@ with ui.header().classes('justify-between text-white').style('background-color: 
 with ui.tabs().classes('w-full') as tabs:
     ui.tab("Read")
     ui.tab("Edit")
-    ui.tab("Summarization Playground")
+    ui.tab("Playground")
 
 with ui.tab_panels(tabs, value='Read').classes('w-full').style('background-color: rgba(0,0,0,0)'):
     with ui.tab_panel('Read').classes('w-full'):
         chat_container_read = ui.column().classes('w-full max-w-4xl mx-auto')
     with ui.tab_panel('Edit').classes('w-full'):
         chat_container = ui.column().classes('w-full max-w-4xl mx-auto')
-    with ui.tab_panel('Summarization Playground').classes('w-full'):
-        summarization_playground_container = ui.column().classes('w-full max-w-4xl mx-auto')
+    with ui.tab_panel('Playground').classes('w-full'):
+        playground_container = ui.column().classes('w-full max-w-4xl mx-auto')
     # ui.button('Choose file', on_click=pick_file).props('icon=folder')
 
         # update(...) uses run_javascript which is only possible after connecting
@@ -357,10 +371,13 @@ with ui.right_drawer() as right_drawer:
 left_drawer.toggle()
 right_drawer.toggle()
 
-with summarization_playground_container:
-    summarization_playground_input = ui.textarea("Input:").classes('w-full no-wrap')
-    summarization_playground_output = ui.html().classes('w-full no-wrap')
-    ui.button("Summarize", on_click=summarization_playground_process)
+with playground_container:
+    playground_input = ui.textarea("Input:").classes('w-full no-wrap')
+    playground_output = ui.html().classes('w-full no-wrap')
+    with ui.row():
+        ui.button("Summarize", on_click=pg_summarize)
+        ui.button("Load All Text", on_click=pg_load_game_text)
+        ui.button("Load All Summary", on_click=pg_load_game_summary)
 # endregion
 
 # region Footer
