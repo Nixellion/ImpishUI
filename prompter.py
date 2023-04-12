@@ -94,6 +94,13 @@ def count_tokens(*args):
     """
     return len(tokenize(*args))
 
+def entities_to_text(entities, filters=None):
+    auto_world_info = ""
+    if entities:
+        for entity, description in entities.items():
+            if filters is None or entity.lower() in filters.lower():
+                auto_world_info += entity + ":\n" + description + "\n\n"
+    return auto_world_info
 
 def format_prompt(user_prompt, world_info="", auto_world_info_entities={}, summary="", instruction="", history="", max_tokens=None, max_history_tokens=512):
     """
@@ -115,10 +122,7 @@ def format_prompt(user_prompt, world_info="", auto_world_info_entities={}, summa
     # in the final prompt
     # Filtering is case insensitive (.lower())
     filters = history + user_prompt
-    auto_world_info = ""
-    for entity, description in auto_world_info_entities.items():
-        if filters is None or entity.lower() in filters.lower():
-            auto_world_info += entity + ":\n" + description + "\n\n"
+    auto_world_info = entities_to_text(auto_world_info_entities, filters)
 
     # Here we generate a test prompt to see how many tokens we have left for summary
     test_prompt = render_template_string(
@@ -144,7 +148,7 @@ def format_prompt(user_prompt, world_info="", auto_world_info_entities={}, summa
         if summary_tokens >= tokens_remaining:
             log.info(
                 f"Prompt with summary is taking too many tokens, trying to summarize it ({summary_tokens} with {max_tokens} limit and {tokens_remaining} remaining)")
-            summary = State.instance.SUM_ADAPTER.summarize(summary, tokens_remaining)
+            summary = State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.SUMMARIZATION]['selected'].summarize(summary, tokens_remaining)
             summary_tokens = count_tokens(summary)
             log.info(f"Summarized to: {summary_tokens}")
 

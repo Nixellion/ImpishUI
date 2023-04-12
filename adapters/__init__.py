@@ -19,13 +19,14 @@ log = get_logger("adapters")
 
 
 class AdapterBase():
-    # region Singleton
-    def __new__(cls):
-        if not hasattr(cls, 'instance'):
-            log.info("Adapter initializing...")
-            cls.instance = super(AdapterBase, cls).__new__(cls)
-        return cls.instance
-    # endregion
+    # NOTE This was supposed to help reduce memory consumption, to only create one instance per adapter type. However this complicated handling of settings, so, at least for now, back to non-singletons
+    # # region Singleton
+    # def __new__(cls):
+    #     if not hasattr(cls, 'instance'):
+    #         log.info("Adapter initializing...")
+    #         cls.instance = super(AdapterBase, cls).__new__(cls)
+    #     return cls.instance
+    # # endregion
 
     def __init__(self, attrs=None):
         self.set_settings()
@@ -125,10 +126,16 @@ class AdapterBase():
         prompt_text = prompt_text.replace(" 's", "'s")
         return prompt_text
     
+    def coherence_score(self, text):
+        pass
+
     def unload(self):
         """
         TODO: Create adapter unloading functionality for things that have a lot in memory, like tokenizers. IF NEEDED, maybe not? Will Python be able to handle it?
         """
+        pass
+
+    def generate_character(self):
         pass
 
 
@@ -136,6 +143,12 @@ class AdapterCapability(Enum):
     TEXT_GENERATION = 10
     SUMMARIZATION = 20
     WORLD_INFO_EXTRACTION = 30
+    TEXT_COHERENCE_SCORING = 40
+    CHARACTER_GENERATOR = 50  # Reserverd for downloading character info from various wikis, roleplaying websites, etc, or for dynamically generating them
+    # PROMPT_GENERATOR = 60  # Reserved for downloading prompts from different prompt websites, or for dynamically generating them
+
+def capability_title(capability):
+    return capability.name.replace("_", " ").title()
 
 
 available_adapters = {}

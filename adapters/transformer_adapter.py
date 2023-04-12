@@ -1,4 +1,8 @@
-from transformers import pipeline, set_seed, AutoModelWithLMHead, AutoTokenizer
+import numpy as np
+import torch
+import math
+
+from transformers import pipeline, set_seed, AutoModelWithLMHead, AutoTokenizer, AutoModel
 
 from adapters import AdapterBase, AdapterCapability
 
@@ -11,8 +15,11 @@ log = get_logger("adapters")
 NAME = "Transformer"
 
 CAPABILITIES = [
-    AdapterCapability.SUMMARIZATION
+    AdapterCapability.SUMMARIZATION,
+    AdapterCapability.TEXT_COHERENCE_SCORING
 ]
+
+
 
 
 # INSTALLING PYTORCH CUDA https://stackoverflow.com/questions/70340812/how-to-install-pytorch-with-cuda-support-with-pip-in-visual-studio
@@ -41,33 +48,73 @@ class Adapter(AdapterBase):
         "device":
         {
             "type": int,
-            "default": 0,
+            "default": -1,
             "help": "Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model on the associated CUDA device id."
-        },
-        # "use_cuda":
-        # {
-        #     "type": bool,
-        #     "default": True
-        # }
+        }
+
     }
 
     def __init__(self, attrs=None):
         super().__init__(attrs)
-        self.loaded_model = None
-        self.generator = None
+        self.loaded_model_name = None
+        self.model = None
+        self.tokenizer = None
+        self.summarization_pipeline = None
+
+    def ensure_loaded_model(self):
+        if self.loaded_model_name != self.huggingface_model:
+            log.info(f"Transformer adapter loading {self.huggingface_model} model...")
+            self.summarization_pipeline = pipeline('summarization', model=self.huggingface_model, device=self.device)
+            self.loaded_model_name = self.huggingface_model
+            self.tokenizer = AutoTokenizer.from_pretrained(self.loaded_model_name)
+            self.model = AutoModel.from_pretrained(self.loaded_model_name)
+            if self.device >= 0:
+                # self.loaded_model_name.to("cuda")
+                self.model.to("cuda")
+                # self.tokenizer.to("cuda")
 
     def summarize_chunk(self, text, max_tokens):
-        if self.loaded_model != self.huggingface_model:
-            log.info(f"Summarizer loading {self.huggingface_model} model...")
-            self.generator = pipeline('summarization', model=self.huggingface_model, device=self.device)
-            self.loaded_model = self.huggingface_model
-            if self.device >= 0:
-                self.loaded_model.to("cuda")
+        self.ensure_loaded_model()
 
         log.info(f"------------\nRunning summarization inference: {text}\n------------")
-        summary_text = self.generator(text,
+        summary_text = self.summarization_pipeline(text,
                                       max_length=max_tokens,
                                       min_length=max(max_tokens, self.min_length),
                                       do_sample=False)[0]['summary_text']
 
         return summary_text
+    
+    def coherence_score(self, text):
+        log.info(f"Calculating coherence score...")
+        self.ensure_loaded_model()
+        # Tokenize the text into sentences
+        sentences = [sent.strip() for sent in text.split('.')]
+        sentences = [sent for sent in sentences if len(sent) > 0]
+        num_sentences = len(sentences)
+
+        # Compute the sentence embeddings using BERT
+        embeddings = []
+        for sent in sentences:
+            inputs = self.tokenizer(sent, padding=True, truncation=True, return_tensors='pt')
+            with torch.no_grad():
+                if self.device >= 0:
+                    outputs = self.model(**inputs.to(self.device))
+                else:
+                    outputs = self.model(**inputs)
+
+            # If the tensor is already on the CPU, calling the cpu() method will have no effect and it will return the tensor unchanged. Therefore, you don't need to add any condition to handle that case.
+            # BUT! Could be wrong.
+            embeddings.append(outputs.last_hidden_state.mean(dim=1).squeeze().cpu().numpy())
+
+        # Compute the pairwise cosine similarity between sentence embeddings
+        similarity_matrix = np.zeros((num_sentences, num_sentences))
+        for i in range(num_sentences):
+            for j in range(num_sentences):
+                if i != j:
+                    similarity_matrix[i][j] = np.dot(embeddings[i], embeddings[j]) / (np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[j]))
+
+        # Compute the coherence score as the average pairwise similarity
+        coherence = np.sum(similarity_matrix) / (num_sentences * (num_sentences - 1))
+        if math.isnan(coherence) or coherence == "nan" or coherence is None:
+            coherence = 0
+        return coherence

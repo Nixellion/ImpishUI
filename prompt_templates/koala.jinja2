@@ -1,0 +1,6 @@
+{# https://github.com/young-geng/EasyLM/blob/main/docs/koala.md#koala-chatbot-prompts #}
+{# TODO: It seems Koala may also benefit from better handling of the 'chat log'.
+Worth it to think about how to better implement handling of such functionality with prompting.
+Maybe format_prompt() function should also output a dictionary\array of messages - shortened to take up proper amount of tokens?
+Simplest approach would be to make it so it leaves X amount of tokens unused so that jinja template can handle adding USER: and the like, different models may use different amount of this. #}
+BEGINNING OF CONVERSATION: USER: {% if instruction %}{{instruction|replace("\n", " ")}}{% endif %}{% if world_info %}[{{world_info|replace("\n", " ")}}]{% endif %}{% if auto_world_info %}[{{auto_world_info|replace("\n", " ")}}]{% endif %}{% if summary %}{{summary|replace("\n", " ")}}{% endif %}{% if history %}{{history|replace("\n", " ")}}{% endif %}{% if user_prompt %}{{user_prompt|replace("\n", " ")}}{% endif %} GPT: 

@@ -17,6 +17,7 @@ from copy import copy
 
 
 from adapters.sumy_adapter import Adapter as SumyAdapter
+import adapters
 # endregion
 
 from debug import get_logger
@@ -91,7 +92,7 @@ class Game(ImpishBaseModel):
         """
         filters: Any text, if it containts the name it's info will be included (case insensitive).
         """
-        entities = State.instance.chosen_wi_extractor_adapter.extract_world_info(self.all_text)
+        entities = State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.WORLD_INFO_EXTRACTION]['selected'].extract_world_info(self.all_text)
         # text = ""
         # for entity, description in entities.items():
         #     if filters is None or entity.lower() in filters.lower():
@@ -137,7 +138,7 @@ def load_game(game_id):
         try:
             state_pickle = copy(game.state_pickle)
             loaded_state = jsonpickle.decode(state_pickle.decode("utf-8"))
-            State.instance = loaded_state
+            # State.instance = loaded_state  # BUG Disabling until fixed
         except Exception as e:
             log.warning(f"Failed loading UI state from db: {e}")
     State.instance.LOADED_GAME = Game.select().where(Game.id == game_id).get()

@@ -3,15 +3,16 @@
 TODO:
 
 - [x] Reading and Editing modes
+- [x] Per-paragraph generation, generate multiple paragraphs.
+- [x] Separate dedicated summarizer editor
+- [x] Generating in multiple passes, and choosing one with best coherence score
 
-
-- [ ] Per-paragraph generation, generate multiple paragraphs.
+- [ ] Consider adding-using this: https://github.com/chatarena/chatarena
+- [ ] Consider using this if it's faster-lighter-better: https://stackoverflow.com/questions/60515107/calculating-semantic-coherence-in-a-given-speech-transcript
 - [ ] "Processing" state, locking UI and showing progress spinner or bar
 - [ ] Savegames UI, selecting and adding games
 - [ ] Remember settings (broken)
-- [ ] Story export options (formats, plaintext or smth)
-- [ ] Separate dedicated summarizer editor
-- [ ] Filtering of text
+- [ ] Story export - more options (formats, plaintext or smth)
 
 - [ ] AND CHECK TODO, FIXME, BUG AND OTHER TAGS IN THE PROJECT (VSCODE TODOs extension or PyCharm can list them)
 """
@@ -64,16 +65,20 @@ async def export_game() -> None:
 
 # here we use our custom page decorator directly and just put the content creation into a separate function
 
+from copy import copy
+
+
 def get_selected_adapter(adapter_dropdown):
     log.debug(f"Get selected adapter: {adapter_dropdown}")
     return adapters.available_adapters[adapter_dropdown.value].Adapter()
 
 
 def convert_ui_settings(settings):
-    log.info(f"convert_ui_settings: {settings}")
+    log.debug(f"convert_ui_settings: {settings}")
     s = {}
     for key, ui_element in settings.items():
         s[key] = ui_element.value
+    log.debug(f"Converted settings: {s}")
     return s
 
 
@@ -158,29 +163,44 @@ async def reload_chat() -> None:
 
 def update_selected_adapaters():
     log.debug("# update_selected_adapaters...")
-    log.debug("# get_selected_adapters...")
-    State.instance.chosen_textgen_adapter = get_selected_adapter(textgen_adapter)
-    State.instance.chosen_sum_adapter = get_selected_adapter(summarizer_adapter)
-    State.instance.chosen_wi_extractor_adapter = get_selected_adapter(wi_extractor_adapter)
+    for capability in adapters.AdapterCapability:
+        log.debug(f"# get_selected_adapters: {capability.name}")
+        State.instance.adapters_ui_data['ui'][capability]['selected'] = get_selected_adapter(
+            State.instance.adapters_ui_data['ui'][capability]['selector_ui'])
 
-    log.debug("# set_settings...")
-    State.instance.chosen_textgen_adapter.set_settings(convert_ui_settings(State.instance.textgen_settings))
-    State.instance.chosen_sum_adapter.set_settings(convert_ui_settings(State.instance.summarizer_settings))
-    State.instance.chosen_wi_extractor_adapter.set_settings(convert_ui_settings(State.instance.wi_extractor_settings))
-
+        log.debug(
+            f"# set_settings: {capability.name} > {State.instance.adapters_ui_data['ui'][capability]['selected']}")
+        State.instance.adapters_ui_data['ui'][capability]['selected'].set_settings(
+            convert_ui_settings(State.instance.adapters_ui_data['ui'][capability]['current_settings']))
+    print(State.instance.adapters_ui_data)
     log.debug("# State.instance.LOADED_GAME.summarizer = ...")
-    State.instance.LOADED_GAME.summarizer = summarizer_adapter.value
+    State.instance.LOADED_GAME.summarizer = State.instance.adapters_ui_data[
+        'ui'][adapters.AdapterCapability.SUMMARIZATION]['selector_ui'].value
     State.instance.LOADED_GAME.save()
 
     log.debug("# State.instance.SUM_ADAPTER = ...")
-    State.instance.SUM_ADAPTER = State.instance.chosen_sum_adapter
+    State.instance.SUM_ADAPTER = State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.SUMMARIZATION]['selected']
     State.instance.TEMPLATE_NAME = textgen_prompt_format.value
 
 
 async def pg_summarize():
     update_selected_adapaters()
-    playground_output.set_content(State.instance.SUM_ADAPTER.summarize(
+    playground_output.set_value(State.instance.SUM_ADAPTER.summarize(
         playground_input.value).replace("\n", "<br>"))
+    
+async def pg_generate_character():
+    update_selected_adapaters()
+    playground_output.set_value(State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.CHARACTER_GENERATOR]['selected'].generate_character())
+
+
+async def pg_extract_wi(from_input=True):
+    update_selected_adapaters()
+
+    auto_world_info_entities = State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.WORLD_INFO_EXTRACTION]['selected'].extract_world_info(playground_input.value if from_input else State.instance.LOADED_GAME.all_text)
+    auto_world_info = prompter.entities_to_text(auto_world_info_entities)
+
+    playground_output.set_value(auto_world_info)
+
 
 
 # TODO: This should be handled as "Heavy computation" https://github.com/zauberzeug/nicegui/blob/main/examples/progress/main.py
@@ -190,8 +210,9 @@ async def send() -> None:
         return
     State.instance.BUSY = True
     State.instance.progress_spinner.visible = True
-    final_ai_response = None
+    final_ai_response = ""
     ai_response = None
+    previous_ai_response = None
     message = None
     print()
     log.message("#" * 80)
@@ -199,28 +220,60 @@ async def send() -> None:
     for i in range(0, int(paragraphs_to_generate.value)):
         log.message(f"PARAGRAPH {i}...")
         try:
-            auto_world_info_entities = State.instance.LOADED_GAME.get_automatic_world_info()
+            auto_world_info_entities = State.instance.LOADED_GAME.get_automatic_world_info() if auto_wi_extraction.value is True else None
             prompt = prompter.format_prompt(
                 user_prompt=user_prompt.value if i == 0 else user_prompt.value + "\n\n" + final_ai_response,
                 summary=State.instance.LOADED_GAME.ai_summary_entries if summary_only_ai_messages.value else State.instance.LOADED_GAME.all_summary_entries,
                 world_info=world_info.value,
                 auto_world_info_entities=auto_world_info_entities,
                 instruction=instruction.value if i == 0 else "Continue your previous response.",
-                max_tokens=State.instance.chosen_textgen_adapter.get_max_tokens(),
+                max_tokens=State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.TEXT_GENERATION]['selected'].get_max_tokens(
+                ),
                 max_history_tokens=max_history_tokens.value,
                 history=State.instance.LOADED_GAME.all_text
             )
 
             log.message(f"PROMPT: {prompt}")
 
-            ai_response = State.instance.chosen_textgen_adapter.generate(prompt)
+            if coherence_variations_to_generate.value <= 1:
+                ai_response = State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.TEXT_GENERATION]['selected'].generate(
+                    prompt)
+            else:
+                coherence_variants = []
+                coherence_scores = []
+                for i in range(0, int(coherence_variations_to_generate.value)):
+                    variant = State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.TEXT_GENERATION]['selected'].generate(
+                        prompt)
+                    variant_with_prompt = prompt + variant
+                    variant_score = State.instance.adapters_ui_data['ui'][adapters.AdapterCapability.TEXT_COHERENCE_SCORING]['selected'].coherence_score(
+                        variant_with_prompt)
+                    coherence_variants.append(variant)
+                    coherence_scores.append(variant_score)
+                # Select text by index of the maximum score varians. If, somehow, 2 variants have the same score it will select the first one it gets.
+                # Can be improved upon by selecting a random one, but the change of getting 2 idential float values in real world scenario is very slim
+                log.debug("Selection based on scores:")
+                log.debug(coherence_scores)
+                log.debug(coherence_variants)
+                max_number_index = coherence_scores.index(max(coherence_scores))
+                log.debug(f"Selection index: {max_number_index}")
+                ai_response = coherence_variants[max_number_index]
+
+            log.message("=" * 80)
+            log.message(f"RESPONSE: {ai_response}")
+
+            # region Repetition prevention. For now just stopping generation.
+            # TODO Improve logic to somehow force it to alter it's result.
+            if previous_ai_response is not None and ai_response == previous_ai_response:
+                log.warning("Encountered repetition, stopping paragraphs generation.")
+                break
+
+            previous_ai_response = ai_response
+            # endregion
+
             if i == 0:
                 final_ai_response = ai_response
             else:
                 final_ai_response += "\n\n" + ai_response.strip()
-
-            log.message("=" * 80)
-            log.message(f"RESPONSE: {ai_response}")
 
         except Exception as e:
             log.error(e, exc_info=True)
@@ -241,6 +294,7 @@ async def send() -> None:
 # region Playground-specific functions
 async def pg_load_game_text():
     playground_input.set_value(State.instance.LOADED_GAME.all_text)
+
 
 async def pg_load_game_summary():
     playground_input.set_value(State.instance.LOADED_GAME.all_summary_entries)
@@ -283,75 +337,55 @@ State.instance.progress_spinner = ui.spinner()
 State.instance.progress_spinner.visible = False
 # endregion
 
+
 # region Drawers
 with ui.left_drawer() as left_drawer:
-
-    text_generation_adapters = {}
-    summarization_adapters = {}
-    wi_extractor_adapters = {}
     for adapter_name, adapter_module in adapters.available_adapters.items():
-        if adapters.AdapterCapability.TEXT_GENERATION in adapter_module.CAPABILITIES:
-            text_generation_adapters[adapter_name] = adapter_module.NAME
-        if adapters.AdapterCapability.SUMMARIZATION in adapter_module.CAPABILITIES:
-            summarization_adapters[adapter_name] = adapter_module.NAME
-        if adapters.AdapterCapability.WORLD_INFO_EXTRACTION in adapter_module.CAPABILITIES:
-            wi_extractor_adapters[adapter_name] = adapter_module.NAME
+        for capability in adapters.AdapterCapability:
+            if capability not in State.instance.adapters_ui_data['ui']:
+                State.instance.adapters_ui_data['ui'][capability] = {
+                    'adapters': {},
+                    'settings_container_ui': None,
+                    'selector_ui': None,
+                    'ui_update_func': None
+                }
+            if capability in adapter_module.CAPABILITIES:
+                State.instance.adapters_ui_data['ui'][capability]['adapters'][adapter_name] = adapter_module.NAME
 
-    # region Textgen Settings
-    async def textgen_ui_update() -> None:
-        textgen_ui.clear()
-        with textgen_ui:
-            State.instance.textgen_settings = await adapter_settings_async(get_selected_adapter(textgen_adapter))
-        with textgen_adapter:
-            docstring = get_selected_adapter(textgen_adapter).__doc__
+    # region Adapters dynamic UI
+    async def ui_update(capability) -> None:
+        print("UPDATING")
+        State.instance.adapters_ui_data['ui'][capability]['settings_container_ui'].clear()
+        with State.instance.adapters_ui_data['ui'][capability]['settings_container_ui']:
+            State.instance.adapters_ui_data['ui'][capability]['current_settings'] = await adapter_settings_async(get_selected_adapter(State.instance.adapters_ui_data['ui'][capability]['selector_ui']))
+        with State.instance.adapters_ui_data['ui'][capability]['selector_ui']:
+            docstring = get_selected_adapter(State.instance.adapters_ui_data['ui'][capability]['selector_ui']).__doc__
             ui.tooltip(docstring if docstring else "No description provided for this adapter.")
 
-    textgen_adapter = ui.select(text_generation_adapters, value=list(summarization_adapters)[
-                                0], label='TextGen Adapter', on_change=textgen_ui_update)
-    with ui.expansion(f"Textgen settings", icon='gear') as textgen_ui:
-        State.instance.textgen_settings = adapter_settings(get_selected_adapter(textgen_adapter))
+    for capability in adapters.AdapterCapability:
+        State.instance.adapters_ui_data['ui'][capability]['ui_update_func'] = ui_update
+        with ui.expansion(f"{adapters.capability_title(capability)}", icon='settings') as expansion_ui:
+            State.instance.adapters_ui_data['ui'][capability]['selector_ui'] = ui.select(State.instance.adapters_ui_data['ui'][capability]['adapters'], value=list(State.instance.adapters_ui_data['ui'][capability]['adapters'])[
+                0], label=f'{adapters.capability_title(capability)} Adapter', on_change=partial(ui_update, capability))
+            with ui.column() as settings_container_ui:
+                State.instance.adapters_ui_data['ui'][capability]['settings_container_ui'] = settings_container_ui
+
+                State.instance.adapters_ui_data['ui'][capability]['current_settings'] = adapter_settings(
+                    get_selected_adapter(State.instance.adapters_ui_data['ui'][capability]['selector_ui']))
 
     textgen_prompt_format = ui.select(prompter.get_all_formats(), value=prompter.get_all_formats()[
                                       0], label='TextGen Prompt Format')
     # endregion
 
-    # region Summarizer UI
-    async def summarizer_ui_update() -> None:
-        summarizer_ui.clear()
-        with summarizer_ui:
-            State.instance.summarizer_settings = await adapter_settings_async(get_selected_adapter(summarizer_adapter))
-        with summarizer_adapter:
-            docstring = get_selected_adapter(summarizer_adapter).__doc__
-            ui.tooltip(docstring if docstring else "No description provided for this adapter.")
-
-    summarizer_adapter = ui.select(summarization_adapters, value=list(
-        summarization_adapters)[0], label='Summarization Adapter', on_change=summarizer_ui_update)
-
-    with ui.expansion(f"Summarizer settings", icon='gear') as summarizer_ui:
-        State.instance.summarizer_settings = adapter_settings(get_selected_adapter(summarizer_adapter))
+    
     tokenizer_name = ui.select(config['tokenizers'], value=list(
         config['tokenizers'])[0], label='Tokenizer', on_change=change_tokenizer)
-    # endregion
 
-    # region World Info Extractor UI
-    async def wi_extractor_ui_update() -> None:
-        wi_extractor_ui.clear()
-        with wi_extractor_ui:
-            State.instance.wi_extractor_settings = await adapter_settings_async(get_selected_adapter(wi_extractor_adapter))
-        with wi_extractor_adapter:
-            docstring = get_selected_adapter(wi_extractor_adapter).__doc__
-            ui.tooltip(docstring if docstring else "No description provided for this adapter.")
-
-    wi_extractor_adapter = ui.select(wi_extractor_adapters, value=list(
-        wi_extractor_adapters)[0], label='WI Extractor Adapter', on_change=wi_extractor_ui_update)
-
-    with ui.expansion(f"WI Extractor Settings", icon='gear') as wi_extractor_ui:
-        State.instance.wi_extractor_settings = adapter_settings(get_selected_adapter(wi_extractor_adapter))
-
-    # endregion
 
     summary_only_ai_messages = ui.switch("Include only AI messages in summary", value=False)
+    auto_wi_extraction = ui.switch("Perform Auto WI Extraction", value=False)
     paragraphs_to_generate = ui.number("Pargraphs to generate", value=3)
+    coherence_variations_to_generate = ui.number("Variations to generate", value=3)
 
     with ui.row():
         ui.label("Max history tokens:")
@@ -361,8 +395,11 @@ with ui.left_drawer() as left_drawer:
     # export_game_button = ui.button('Export Game', on_click=export_game).props('icon=folder')
     ui.button('Export Game', on_click=export_game).props('icon=folder')
 
-    asyncio.run(textgen_ui_update())
-    asyncio.run(summarizer_ui_update())
+    for capability, adap_data in State.instance.adapters_ui_data['ui'].items():
+        log.debug(f"First run, updating UI for: {capability.name}")
+        asyncio.run(adap_data['ui_update_func'](capability))
+    # asyncio.run(textgen_ui_update())
+    # asyncio.run(summarizer_ui_update())
 
 with ui.right_drawer() as right_drawer:
     instruction = ui.textarea("Instruction", value="Continue writing a story")
@@ -373,9 +410,12 @@ right_drawer.toggle()
 
 with playground_container:
     playground_input = ui.textarea("Input:").classes('w-full no-wrap')
-    playground_output = ui.html().classes('w-full no-wrap')
+    playground_output = ui.textarea("Output:").classes('w-full no-wrap')
     with ui.row():
         ui.button("Summarize", on_click=pg_summarize)
+        ui.button("Extract World Info From Input", on_click=partial(pg_extract_wi, True))
+        ui.button("Extract World Info From Game", on_click=partial(pg_extract_wi, False))
+        ui.button("Generate Character", on_click=pg_generate_character)
         ui.button("Load All Text", on_click=pg_load_game_text)
         ui.button("Load All Summary", on_click=pg_load_game_summary)
 # endregion

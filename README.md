@@ -21,8 +21,15 @@ You need `Python 3` and `pip` installed on your system.
 1. Clone this repository
 2. Create a copy of `config_example.yaml` and rename it to `config.yaml`
 3. Check settings available in `config.yaml` and adjust them to your liking
-4. On Windows - run `run.bat`. It should `pip install` all the requirements and start the app.
-   On Linux or MacOS - run `pip install -r requirements.txt` from withing the current folder, then run `streamlit run app.py`
+4. On Windows - run `install_requirements.bat` first, and then run `run.bat`. You may need to run `install_requirements.bat` after every git pull just to make sure everything is up to date.
+   On Linux or MacOS - run `pip install -r requirements.txt` from within the current folder, then run `python3 app.py` for older systems or `python app.py` for newer, but if you're on linux you probably know :)
+
+
+## Troubleshooting
+
+If you get an error about missing `en_core_web_sm`, that means that for some reason install_requirements.bat didn't download it. 
+Depending on your python installation environment you may need to adjust this command and run it manually: `python -m spacy download en_core_web_sm`
+
 
 
 ## Screenshots
